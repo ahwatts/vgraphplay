@@ -15,6 +15,7 @@ std::ostream& operator<<(std::ostream &stream, VkPhysicalDeviceProperties &props
          << ", Device type: " << props.deviceType
          << ", Vendor ID: " << props.vendorID
          << ", Device ID: " << props.deviceID << " ]";
+  return stream;
 }
 
 std::ostream& operator<<(std::ostream &stream, VkPhysicalDeviceType &device_type) {
@@ -32,4 +33,30 @@ std::ostream& operator<<(std::ostream &stream, VkPhysicalDeviceType &device_type
     default:
         return stream << "Unknown: " << device_type;
     }
+}
+
+std::ostream& operator<<(std::ostream &stream, VkQueueFamilyProperties &props) {
+    stream << "[ Flags:";
+
+    if (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        stream << " Graphics";
+    }
+
+    if (props.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+        stream << " Compute";
+    }
+
+    if (props.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+        stream << " Transfer";
+    }
+
+    if (props.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+        stream << " Sparse-Binding";
+    }
+
+    stream << ", Queue count: " << props.queueCount
+           << ", Valid timestamp bits: " << props.timestampValidBits
+           << " ]";
+
+    return stream;
 }

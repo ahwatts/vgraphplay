@@ -53,6 +53,16 @@ void initVulkan(VGraphplayApp &app) {
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(device, &props);
         std::cout << "Physical device: " << props << std::endl;
+
+        uint32_t num_queue_families = 0;
+        std::vector<VkQueueFamilyProperties> queue_families;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, nullptr);
+        queue_families.resize(num_queue_families);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, queue_families.data());
+
+        for (auto&& queue_family_props : queue_families) {
+            std::cout << "  Queue family: " << queue_family_props << std::endl;
+        }
     }
 }
 

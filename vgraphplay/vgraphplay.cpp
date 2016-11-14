@@ -40,11 +40,11 @@ VkPhysicalDevice choosePhysicalDevice(VkInstance &instance) {
         VkPhysicalDeviceMemoryProperties mem_props;
         vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
 
-        for (int i = 0; i < mem_props.memoryHeapCount; ++i) {
+        for (unsigned int i = 0; i < mem_props.memoryHeapCount; ++i) {
             std::cout << "  Memory heap " << i << ": " << mem_props.memoryHeaps[i] << std::endl;
         }
 
-        for (int i = 0; i < mem_props.memoryTypeCount; ++i) {
+        for (unsigned int i = 0; i < mem_props.memoryTypeCount; ++i) {
             std::cout << "  Memory type " << i << ": " << mem_props.memoryTypes[i] << std::endl;
         }
 

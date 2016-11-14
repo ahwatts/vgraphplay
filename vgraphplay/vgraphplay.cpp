@@ -11,7 +11,7 @@ class VGraphplayApp {
 public:
     VGraphplayApp()
         : instance{nullptr},
-          physical_devices{}
+          physical_device{}
     {}
 
     ~VGraphplayApp() {
@@ -21,8 +21,46 @@ public:
     }
 
     VkInstance instance;
-    std::vector<VkPhysicalDevice> physical_devices;
+    VkPhysicalDevice physical_device;
 };
+
+VkPhysicalDevice choosePhysicalDevice(VkInstance &instance) {
+    uint32_t num_devices = 0;
+    vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
+
+    std::vector<VkPhysicalDevice> devices(num_devices);
+    vkEnumeratePhysicalDevices(instance, &num_devices, devices.data());
+
+    for (auto&& device : devices) {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(device, &props);
+
+        std::cout << "Physical device: " << props << std::endl;
+
+        VkPhysicalDeviceMemoryProperties mem_props;
+        vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
+
+        for (int i = 0; i < mem_props.memoryHeapCount; ++i) {
+            std::cout << "  Memory heap " << i << ": " << mem_props.memoryHeaps[i] << std::endl;
+        }
+
+        for (int i = 0; i < mem_props.memoryTypeCount; ++i) {
+            std::cout << "  Memory type " << i << ": " << mem_props.memoryTypes[i] << std::endl;
+        }
+
+        uint32_t num_queue_families = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, nullptr);
+        std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, queue_families.data());
+
+        for (auto&& queue_family : queue_families) {
+            std::cout << "  Queue family: " << queue_family << std::endl;
+        }
+    }
+
+    // We probably want to make a better decision than this...
+    return devices[0];
+}
 
 void initVulkan(VGraphplayApp &app) {
     VkInstanceCreateInfo vk_info;
@@ -44,26 +82,7 @@ void initVulkan(VGraphplayApp &app) {
         std::exit(1);
     }
 
-    uint32_t num_devices = 0;
-    vkEnumeratePhysicalDevices(app.instance, &num_devices, nullptr);
-    app.physical_devices.resize(num_devices);
-    vkEnumeratePhysicalDevices(app.instance, &num_devices, app.physical_devices.data());
-
-    for (auto&& device : app.physical_devices) {
-        VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(device, &props);
-        std::cout << "Physical device: " << props << std::endl;
-
-        uint32_t num_queue_families = 0;
-        std::vector<VkQueueFamilyProperties> queue_families;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, nullptr);
-        queue_families.resize(num_queue_families);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, queue_families.data());
-
-        for (auto&& queue_family_props : queue_families) {
-            std::cout << "  Queue family: " << queue_family_props << std::endl;
-        }
-    }
+    app.physical_device = choosePhysicalDevice(app.instance);
 }
 
 int main(int argc, char **argv) {

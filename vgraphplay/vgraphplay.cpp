@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 
+#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #include "utils.h"
@@ -41,14 +42,47 @@ public:
     }
 
     bool initInstance() {
+        uint32_t num_extensions;
+        vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
+        std::vector<VkExtensionProperties> extensions(num_extensions);
+        vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, extensions.data());
+
+        for (auto&& extension : extensions) {
+            std::cout << "Extension: " << extension << std::endl;
+        }
+
+#if 0
+        uint32_t num_layers;
+        vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
+        std::vector<VkLayerProperties> layers(num_layers);
+        vkEnumerateInstanceLayerProperties(&num_layers, layers.data());
+
+        for (auto&& layer : layers) {
+            std::cout << "Layer: " << layer << std::endl;
+
+            uint32_t num_extensions;
+            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
+            std::vector<VkExtensionProperties> extensions(num_extensions);
+            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
+
+            for (auto&& extension : extensions) {
+                std::cout << "  Extension: " << extension << std::endl;
+            }
+        }
+#endif
+
         VkInstanceCreateInfo create_info;
         create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         create_info.pNext = nullptr;
         create_info.pApplicationInfo = nullptr;
         create_info.enabledLayerCount = 0;
         create_info.ppEnabledLayerNames = nullptr;
-        create_info.enabledExtensionCount = 0;
-        create_info.ppEnabledExtensionNames = nullptr;
+
+        std::vector<const char*> extension_names;
+        extension_names.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
+        extension_names.emplace_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+        create_info.enabledExtensionCount = extension_names.size();
+        create_info.ppEnabledExtensionNames = extension_names.data();
 
         VkResult rslt = vkCreateInstance(&create_info, nullptr, &instance);
         if (rslt == VK_SUCCESS) {
@@ -72,6 +106,15 @@ public:
             vkGetPhysicalDeviceProperties(device, &props);
 
             std::cout << "Physical device: " << props << std::endl;
+
+            uint32_t num_extensions;
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
+            std::vector<VkExtensionProperties> extensions(num_extensions);
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, extensions.data());
+
+            for (auto&& extension : extensions) {
+                std::cout << "  Extension: " << extension << std::endl;
+            }
 
             VkPhysicalDeviceMemoryProperties mem_props;
             vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
@@ -122,11 +165,14 @@ public:
         device_info.pNext = nullptr;
         device_info.queueCreateInfoCount = 1;
         device_info.pQueueCreateInfos = &queue_info;
-        device_info.enabledExtensionCount = 0;
-        device_info.ppEnabledExtensionNames = nullptr;
         device_info.enabledLayerCount = 0;
         device_info.ppEnabledLayerNames = nullptr;
         device_info.pEnabledFeatures = nullptr;
+
+        std::vector<const char*> extension_names;
+        extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        device_info.enabledExtensionCount = extension_names.size();
+        device_info.ppEnabledExtensionNames = extension_names.data();
 
         VkResult rslt = vkCreateDevice(physical_device, &device_info, nullptr, &device);
 

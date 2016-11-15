@@ -2,6 +2,31 @@
 
 #include "utils.h"
 
+std::ostream& operator<<(std::ostream &stream, VkLayerProperties &props) {
+    stream << "[ Name: " << props.layerName
+           << ", Spec version: "
+           << VK_VERSION_MAJOR(props.specVersion) << "."
+           << VK_VERSION_MINOR(props.specVersion) << "."
+           << VK_VERSION_PATCH(props.specVersion)
+           << ", Implementation version: "
+           << VK_VERSION_MAJOR(props.implementationVersion) << "."
+           << VK_VERSION_MINOR(props.implementationVersion) << "."
+           << VK_VERSION_PATCH(props.implementationVersion)
+           << ", Description: " << props.description << " ]";
+    return stream;
+}
+
+
+std::ostream& operator<<(std::ostream &stream, VkExtensionProperties &props) {
+    stream << "[ Name: " << props.extensionName
+           << ", Spec version: "
+           << VK_VERSION_MAJOR(props.specVersion) << "."
+           << VK_VERSION_MINOR(props.specVersion) << "."
+           << VK_VERSION_PATCH(props.specVersion)
+           << " ]";
+    return stream;
+}
+
 std::ostream& operator<<(std::ostream &stream, VkPhysicalDeviceProperties &props) {
   stream << "[ Name: " << props.deviceName
          << ", API version: "

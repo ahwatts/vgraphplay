@@ -15,19 +15,19 @@ public:
     {}
 
     ~VGraphplayApp() {
-        if (device != nullptr) {
-            vkDestroyDevice(device, nullptr);
-        }
-
-        if (instance != nullptr) {
-            vkDestroyInstance(instance, nullptr);
-        }
+        vkFreeCommandBuffers(device, cmd_pool, 1, &cmd_buf);
+        vkDestroyCommandPool(device, cmd_pool, nullptr);
+        vkDestroyDevice(device, nullptr);
+        vkDestroyInstance(instance, nullptr);
     }
 
-    VkInstance instance;
-    VkPhysicalDevice physical_device;
-    uint32_t queue_family = 0;
-    VkDevice device;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkCommandPool cmd_pool = VK_NULL_HANDLE;
+    VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
+
+    uint32_t queue_family = UINT32_MAX;
 };
 
 VkPhysicalDevice choosePhysicalDevice(VkInstance &instance) {
@@ -76,7 +76,7 @@ uint32_t chooseQueueFamilyIndex(VkPhysicalDevice &device) {
     }
 
     // ?
-    return 0;
+    return UINT32_MAX;
 }
 
 void initVulkan(VGraphplayApp &app) {
@@ -128,6 +128,37 @@ void initVulkan(VGraphplayApp &app) {
         std::cout << "Device Created: " << app.device << std::endl;
     } else {
         std::cerr << "Error: " << rslt << " device = " << app.device << std::endl;
+        std::exit(1);
+    }
+
+    VkCommandPoolCreateInfo cmd_pool_info;
+    cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cmd_pool_info.pNext = nullptr;
+    cmd_pool_info.flags = 0;
+    cmd_pool_info.queueFamilyIndex = app.queue_family;
+
+    rslt = vkCreateCommandPool(app.device, &cmd_pool_info, nullptr, &app.cmd_pool);
+
+    if (rslt == VK_SUCCESS) {
+        std::cout << "Command pool created: " << app.cmd_pool << std::endl;
+    } else {
+        std::cerr << "Error: " << rslt << " command pool = " << app.cmd_pool << std::endl;
+        std::exit(1);
+    }
+
+    VkCommandBufferAllocateInfo cmd_buf_info;
+    cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmd_buf_info.pNext = nullptr;
+    cmd_buf_info.commandPool = app.cmd_pool;
+    cmd_buf_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmd_buf_info.commandBufferCount = 1;
+
+    rslt = vkAllocateCommandBuffers(app.device, &cmd_buf_info, &app.cmd_buf);
+
+    if (rslt == VK_SUCCESS) {
+        std::cout << "Command buffer created: " << app.cmd_buf << std::endl;
+    } else {
+        std::cerr << "Error: " << rslt << " command buf = " << app.cmd_buf << std::endl;
         std::exit(1);
     }
 }

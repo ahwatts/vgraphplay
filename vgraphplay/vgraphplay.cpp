@@ -66,7 +66,6 @@ public:
             std::cout << "Extension: " << extension << std::endl;
         }
 
-#if 0
         uint32_t num_layers;
         vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
         std::vector<VkLayerProperties> layers(num_layers);
@@ -75,16 +74,15 @@ public:
         for (auto&& layer : layers) {
             std::cout << "Layer: " << layer << std::endl;
 
-            uint32_t num_extensions;
-            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
-            std::vector<VkExtensionProperties> extensions(num_extensions);
-            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
+            // uint32_t num_extensions;
+            // vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
+            // std::vector<VkExtensionProperties> extensions(num_extensions);
+            // vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
 
-            for (auto&& extension : extensions) {
-                std::cout << "  Extension: " << extension << std::endl;
-            }
+            // for (auto&& extension : extensions) {
+            //     std::cout << "  Extension: " << extension << std::endl;
+            // }
         }
-#endif
 
         VkInstanceCreateInfo create_info;
         create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -140,7 +138,7 @@ public:
             VkPhysicalDeviceProperties props;
             vkGetPhysicalDeviceProperties(device, &props);
 
-            std::cout << "Physical device: " << props << std::endl;
+            std::cout << "Physical device: (" << device << ") "<< props << std::endl;
 
             uint32_t num_extensions;
             vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
@@ -173,11 +171,18 @@ public:
 
         for (unsigned int i = 0; i < queue_families.size(); ++i) {
             std::cout << "  Queue family " << i << ": " << queue_families[i] << std::endl;
+
+            VkBool32 supports_present;
+            vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &supports_present);
+            std::cout << "    Can present to surface: " << supports_present << std::endl;
         }
 
         // Choose the first graphics queue...
         for (unsigned int i = 0; i < queue_families.size(); ++i) {
-            if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            VkBool32 supports_present;
+            vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &supports_present);
+
+            if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && supports_present == VK_TRUE) {
                 queue_family = i;
                 break;
             }

@@ -47,12 +47,13 @@ bool Win32Context::initWindow(LONG width, LONG height) {
                           hInstance,          // hInstance
                           NULL);              // no extra parameters
 
-    if (hWnd == NULL) {
+    if (hWnd != NULL) {
+        std::cout << "Created window: " << hWnd << std::endl;
+        return true;
+    } else {
         std::cerr << "Could not create a window" << std::endl;
         return false;
     }
-
-    return true;
 }
 
 void Win32Context::mainLoop() {
@@ -65,6 +66,18 @@ void Win32Context::mainLoop() {
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case WM_PAINT:
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
+            EndPaint(hWnd, &ps);
+        }
+        return 0;
+    case WM_CLOSE:
+        std::cout << "Destroying window " << hWnd << std::endl;
+        DestroyWindow(hWnd);
+        return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;

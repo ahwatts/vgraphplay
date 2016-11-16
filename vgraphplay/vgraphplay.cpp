@@ -25,6 +25,7 @@ public:
           device{VK_NULL_HANDLE},
           cmd_pool{VK_NULL_HANDLE},
           cmd_buf{VK_NULL_HANDLE},
+          surface{VK_NULL_HANDLE},
           queue_family{UINT32_MAX}
     {}
 
@@ -42,6 +43,11 @@ public:
         if (device != VK_NULL_HANDLE) {
             std::cout << "Destroying (logical) device: " << device << std::endl;
             vkDestroyDevice(device, nullptr);
+        }
+
+        if (instance != VK_NULL_HANDLE && surface != VK_NULL_HANDLE) {
+            std::cout << "Destroying surface: " << surface << std::endl;
+            vkDestroySurfaceKHR(instance, surface, nullptr);
         }
 
         if (instance != VK_NULL_HANDLE) {
@@ -102,6 +108,26 @@ public:
             return false;
         }
     }
+
+#ifdef _WIN32
+    bool initSurface(HINSTANCE hInstance, HWND hWnd) {
+        VkWin32SurfaceCreateInfoKHR create_info;
+        create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+        create_info.pNext = nullptr;
+        create_info.flags = 0;
+        create_info.hinstance = hInstance;
+        create_info.hwnd = hWnd;
+
+        VkResult rslt = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface);
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Surface created: " << surface << std::endl;
+            return true;
+        } else {
+            std::cerr << "Error: " << rslt << " surface = " << surface << std::endl;
+            return false;
+        }
+    }
+#endif
 
     bool initDevice() {
         uint32_t num_devices = 0;
@@ -233,6 +259,7 @@ public:
     VkDevice device;
     VkCommandPool cmd_pool;
     VkCommandBuffer cmd_buf;
+    VkSurfaceKHR surface;
 
     uint32_t queue_family;
 };
@@ -250,6 +277,10 @@ int main(int argc, char **argv) {
 
 #ifdef _WIN32
     if (!win_ctx.initWindow(800, 600)) {
+        std::exit(1);
+    }
+
+    if (!app.initSurface(win_ctx.hInstance, win_ctx.hWnd)) {
         std::exit(1);
     }
 #endif

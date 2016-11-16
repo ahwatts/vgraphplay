@@ -266,20 +266,37 @@ public:
 
     bool initSwapchain() {
         VkSurfaceCapabilitiesKHR surf_caps;
-        VkResult rslt = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surf_caps);
-
-        if (rslt != VK_SUCCESS) {
-            std::cerr << "Could not get surface capabilities: " << rslt << " surface capabilities: " << surf_caps << std::endl;
-            return false;
-        }
-
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surf_caps);
         std::cout << "Surface capabilities: " << surf_caps << std::endl;
 
-        // VkSwapchainCreateInfoKHR create_info;
-        // create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        // create_info.pNext = nullptr;
-        // create_info.flags = 0;
-        // create_info.surface = surface;
+        uint32_t num_formats;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_formats, nullptr);
+        std::vector<VkSurfaceFormatKHR> formats(num_formats);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_formats, formats.data());
+
+        for (auto&& format : formats) {
+            std::cout << "Surface format: [ format: " << format.format << " color space: " << format.colorSpace << " ]" << std::endl;
+        }
+
+        uint32_t num_modes;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &num_modes, nullptr);
+        std::vector<VkPresentModeKHR> modes(num_modes);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &num_modes, modes.data());
+
+        for (auto&& mode : modes) {
+            std::cout << "Surface present mode: " << mode << std::endl;
+        }
+
+        VkSwapchainCreateInfoKHR create_info;
+        create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        create_info.pNext = nullptr;
+        create_info.flags = 0;
+        create_info.surface = surface;
+        create_info.minImageCount = surf_caps.minImageCount;
+        create_info.imageFormat = formats[0].format;
+        create_info.imageColorSpace = formats[0].colorSpace;
+        create_info.imageExtent = surf_caps.currentExtent;
+        create_info.imageArrayLayers = 1;
 
         return true;
     }

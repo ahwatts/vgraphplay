@@ -137,6 +137,24 @@ std::ostream& operator<<(std::ostream &stream, VkMemoryHeap &mem_heap) {
 std::ostream& operator<<(std::ostream &stream, VkSurfaceCapabilitiesKHR &surf_caps) {
     stream << "[ Min image count: " << surf_caps.minImageCount
            << ", Max image count: " << surf_caps.maxImageCount
+           << ", Current extent: " << surf_caps.currentExtent.width << "x" << surf_caps.currentExtent.height
+           << ", Min image extent: " << surf_caps.minImageExtent.width << "x" << surf_caps.minImageExtent.height
+           << ", Max image extent: " << surf_caps.maxImageExtent.width << "x" << surf_caps.maxImageExtent.height
            << " ]";
     return stream;
+}
+
+std::ostream& operator<<(std::ostream &stream, VkPresentModeKHR &mode) {
+    switch (mode) {
+    case VK_PRESENT_MODE_IMMEDIATE_KHR:
+        return stream << "Immediate";
+    case VK_PRESENT_MODE_MAILBOX_KHR:
+        return stream << "Mailbox";
+    case VK_PRESENT_MODE_FIFO_KHR:
+        return stream << "FIFO";
+    case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+        return stream << "Relaxed FIFO";
+    default:
+        return stream << mode;
+    }
 }

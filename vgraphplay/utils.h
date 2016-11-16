@@ -15,5 +15,6 @@ std::ostream& operator<<(std::ostream &stream, VkQueueFamilyProperties &queue_fa
 std::ostream& operator<<(std::ostream &stream, VkMemoryType &mem_type);
 std::ostream& operator<<(std::ostream &stream, VkMemoryHeap &mem_heap);
 std::ostream& operator<<(std::ostream &stream, VkSurfaceCapabilitiesKHR &surf_caps);
+std::ostream& operator<<(std::ostream &stream, VkPresentModeKHR &modes);
 
 #endif

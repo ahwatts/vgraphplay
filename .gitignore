@@ -1,1 +1,4 @@
 /build
+/msvc/vgraphplay/Debug
+*.suo
+/msvc/**/*.VC.db

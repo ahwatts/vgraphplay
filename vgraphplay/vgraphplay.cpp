@@ -3,7 +3,16 @@
 #include <iostream>
 #include <vector>
 
+#ifdef _WIN32
+
+#include "win32.h"
+
+#ifndef VK_USE_PLATFORM_WIN32_KHR
 #define VK_USE_PLATFORM_WIN32_KHR
+#endif
+
+#endif // _WIN32
+
 #include <vulkan/vulkan.h>
 
 #include "utils.h"
@@ -231,9 +240,19 @@ public:
 int main(int argc, char **argv) {
     VGraphplayApp app;
 
+#ifdef _WIN32
+    Win32Context win_ctx;
+#endif
+
     if (!app.initInstance()) {
         std::exit(1);
     }
+
+#ifdef _WIN32
+    if (!win_ctx.initWindow(800, 600)) {
+        std::exit(1);
+    }
+#endif
 
     if (!app.initDevice()) {
         std::exit(1);
@@ -242,6 +261,10 @@ int main(int argc, char **argv) {
     if (!app.initCommandBuffer()) {
         std::exit(1);
     }
+
+#ifdef _WIN32
+    win_ctx.mainLoop();
+#endif
 
     return 0;
 }

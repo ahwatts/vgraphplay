@@ -26,6 +26,7 @@ public:
           cmd_pool{VK_NULL_HANDLE},
           cmd_buf{VK_NULL_HANDLE},
           surface{VK_NULL_HANDLE},
+          swapchain{VK_NULL_HANDLE},
           queue_family{UINT32_MAX}
     {}
 
@@ -127,7 +128,7 @@ public:
     }
 #endif
 
-    bool initDevice() {
+    bool chooseDevice() {
         uint32_t num_devices = 0;
         vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
 
@@ -138,7 +139,7 @@ public:
             VkPhysicalDeviceProperties props;
             vkGetPhysicalDeviceProperties(device, &props);
 
-            std::cout << "Physical device: (" << device << ") "<< props << std::endl;
+            std::cout << "Physical device: (" << device << ") " << props << std::endl;
 
             uint32_t num_extensions;
             vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
@@ -191,6 +192,10 @@ public:
         std::cout << "physical device = " << physical_device << std::endl
                   << "queue family = " << queue_family << std::endl;
 
+        return true;
+    }
+
+    bool initDevice() {
         float queue_priority = 1.0;
         VkDeviceQueueCreateInfo queue_info;
         queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -259,12 +264,33 @@ public:
         }
     }
 
+    bool initSwapchain() {
+        VkSurfaceCapabilitiesKHR surf_caps;
+        VkResult rslt = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surf_caps);
+
+        if (rslt != VK_SUCCESS) {
+            std::cerr << "Could not get surface capabilities: " << rslt << " surface capabilities: " << surf_caps << std::endl;
+            return false;
+        }
+
+        std::cout << "Surface capabilities: " << surf_caps << std::endl;
+
+        // VkSwapchainCreateInfoKHR create_info;
+        // create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        // create_info.pNext = nullptr;
+        // create_info.flags = 0;
+        // create_info.surface = surface;
+
+        return true;
+    }
+
     VkInstance instance;
     VkPhysicalDevice physical_device;
     VkDevice device;
     VkCommandPool cmd_pool;
     VkCommandBuffer cmd_buf;
     VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
 
     uint32_t queue_family;
 };
@@ -289,6 +315,14 @@ int main(int argc, char **argv) {
         std::exit(1);
     }
 #endif
+
+    if (!app.chooseDevice()) {
+        std::exit(1);
+    }
+
+    if (!app.initSwapchain()) {
+        std::exit(1);
+    }
 
     if (!app.initDevice()) {
         std::exit(1);

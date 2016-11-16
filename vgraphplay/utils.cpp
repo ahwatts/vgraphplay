@@ -133,3 +133,10 @@ std::ostream& operator<<(std::ostream &stream, VkMemoryHeap &mem_heap) {
 
     return stream;
 }
+
+std::ostream& operator<<(std::ostream &stream, VkSurfaceCapabilitiesKHR &surf_caps) {
+    stream << "[ Min image count: " << surf_caps.minImageCount
+           << ", Max image count: " << surf_caps.maxImageCount
+           << " ]";
+    return stream;
+}

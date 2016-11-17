@@ -41,6 +41,11 @@ public:
             vkDestroyCommandPool(device, cmd_pool, nullptr);
         }
 
+        if (device != VK_NULL_HANDLE && swapchain != VK_NULL_HANDLE) {
+            std::cout << "Destroying swapchain: " << swapchain << std::endl;
+            vkDestroySwapchainKHR(device, swapchain, nullptr);
+        }
+
         if (device != VK_NULL_HANDLE) {
             std::cout << "Destroying (logical) device: " << device << std::endl;
             vkDestroyDevice(device, nullptr);
@@ -95,7 +100,7 @@ public:
         std::vector<const char*> extension_names;
         extension_names.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
         extension_names.emplace_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-        create_info.enabledExtensionCount = extension_names.size();
+        create_info.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
         create_info.ppEnabledExtensionNames = extension_names.data();
 
         VkResult rslt = vkCreateInstance(&create_info, nullptr, &instance);
@@ -216,7 +221,7 @@ public:
 
         std::vector<const char*> extension_names;
         extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        device_info.enabledExtensionCount = extension_names.size();
+        device_info.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
         device_info.ppEnabledExtensionNames = extension_names.data();
 
         VkResult rslt = vkCreateDevice(physical_device, &device_info, nullptr, &device);
@@ -297,8 +302,24 @@ public:
         create_info.imageColorSpace = formats[0].colorSpace;
         create_info.imageExtent = surf_caps.currentExtent;
         create_info.imageArrayLayers = 1;
+        create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        create_info.queueFamilyIndexCount = 1;
+        create_info.pQueueFamilyIndices = &queue_family;
+        create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        create_info.clipped = VK_TRUE;
+        create_info.oldSwapchain = VK_NULL_HANDLE;
 
-        return true;
+        VkResult rslt = vkCreateSwapchainKHR(device, &create_info, nullptr, &swapchain);
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Created swapchain: " << swapchain << std::endl;
+            return true;
+        } else {
+            std::cerr << "Error: " << rslt << " swapchain = " << swapchain << std::endl;
+            return false;
+        }
     }
 
     VkInstance instance;
@@ -337,11 +358,11 @@ int main(int argc, char **argv) {
         std::exit(1);
     }
 
-    if (!app.initSwapchain()) {
+    if (!app.initDevice()) {
         std::exit(1);
     }
 
-    if (!app.initDevice()) {
+    if (!app.initSwapchain()) {
         std::exit(1);
     }
 

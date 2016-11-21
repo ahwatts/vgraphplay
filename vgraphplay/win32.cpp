@@ -75,12 +75,19 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     case WM_CLOSE:
-        std::cout << "Destroying window " << hWnd << std::endl;
+        std::cout << "Destroying window in response to WM_CLOSE: " << hWnd << std::endl;
         DestroyWindow(hWnd);
         return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
+    case WM_KEYDOWN:
+        switch (wParam) {
+        case VK_ESCAPE:
+            std::cout << "Destroying window in response to WM_KEYDOWN with VK_ESCAPE: " << hWnd << std::endl;
+            DestroyWindow(hWnd);
+            return 0;
+        }
     default:
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
     }

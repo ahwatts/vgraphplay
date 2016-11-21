@@ -17,33 +17,83 @@
 
 #include "utils.h"
 
+struct CommandQueueInfo {
+    uint32_t family;
+    VkCommandPool pool;
+    VkCommandBuffer buffer;
+};
+
+struct SwapchainImageInfo {
+    VkImage image;
+    VkImageView view;
+};
+
+struct SwapchainInfo {
+    VkSwapchainKHR swapchain;
+    std::vector<SwapchainImageInfo> images;
+};
+
+struct ImageInfo {
+    VkImage image;
+    VkImageView view;
+    VkDeviceMemory memory;
+};
+
 class VGraphplayApp {
 public:
+    VkInstance instance;
+    VkPhysicalDevice physical_device;
+    VkDevice device;
+    VkSurfaceKHR surface;
+
+    CommandQueueInfo queue;
+    SwapchainInfo swapchain;
+    ImageInfo depth_buffer;
+
     VGraphplayApp()
         : instance{VK_NULL_HANDLE},
           physical_device{VK_NULL_HANDLE},
           device{VK_NULL_HANDLE},
-          cmd_pool{VK_NULL_HANDLE},
-          cmd_buf{VK_NULL_HANDLE},
           surface{VK_NULL_HANDLE},
-          swapchain{VK_NULL_HANDLE},
-          queue_family{UINT32_MAX}
+          queue{UINT32_MAX, VK_NULL_HANDLE, VK_NULL_HANDLE},
+          swapchain{VK_NULL_HANDLE, {}},
+          depth_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE}
     {}
 
     ~VGraphplayApp() {
-        if (device != VK_NULL_HANDLE && cmd_pool != VK_NULL_HANDLE && cmd_buf != VK_NULL_HANDLE) {
-            std::cout << "Freeing command buffer: " << cmd_buf << std::endl;
-            vkFreeCommandBuffers(device, cmd_pool, 1, &cmd_buf);
+        if (device != VK_NULL_HANDLE && depth_buffer.view != VK_NULL_HANDLE) {
+            std::cout << "Destroying depth buffer image view: " << depth_buffer.view << std::endl;
+            vkDestroyImageView(device, depth_buffer.view, nullptr);
         }
 
-        if (device != VK_NULL_HANDLE && cmd_pool != VK_NULL_HANDLE) {
-            std::cout << "Destroying command pool: " << cmd_pool << std::endl;
-            vkDestroyCommandPool(device, cmd_pool, nullptr);
+        if (device != VK_NULL_HANDLE && depth_buffer.image != VK_NULL_HANDLE) {
+            std::cout << "Destroying depth buffer image: " << depth_buffer.image << std::endl;
+            vkDestroyImage(device, depth_buffer.image, nullptr);
         }
 
-        if (device != VK_NULL_HANDLE && swapchain != VK_NULL_HANDLE) {
-            std::cout << "Destroying swapchain: " << swapchain << std::endl;
-            vkDestroySwapchainKHR(device, swapchain, nullptr);
+        if (device != VK_NULL_HANDLE && depth_buffer.memory != VK_NULL_HANDLE) {
+            std::cout << "Freeing depth buffer memory: " << depth_buffer.memory << std::endl;
+            vkFreeMemory(device, depth_buffer.memory, nullptr);
+        }
+
+        if (device != VK_NULL_HANDLE && queue.pool != VK_NULL_HANDLE) {
+            if (queue.buffer != VK_NULL_HANDLE) {
+                std::cout << "Freeing command buffer: " << queue.buffer << std::endl;
+                vkFreeCommandBuffers(device, queue.pool, 1, &queue.buffer);
+            }
+
+            std::cout << "Destroying command pool: " << queue.pool << std::endl;
+            vkDestroyCommandPool(device, queue.pool, nullptr);
+        }
+
+        if (device != VK_NULL_HANDLE && swapchain.swapchain != VK_NULL_HANDLE) {
+            for (auto&& image : swapchain.images) {
+                std::cout << "Destroying swapchain image view: " << image.view << std::endl;
+                vkDestroyImageView(device, image.view, nullptr);
+            }
+
+            std::cout << "Destroying swapchain: " << swapchain.swapchain << std::endl;
+            vkDestroySwapchainKHR(device, swapchain.swapchain, nullptr);
         }
 
         if (device != VK_NULL_HANDLE) {
@@ -189,13 +239,13 @@ public:
             vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &supports_present);
 
             if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && supports_present == VK_TRUE) {
-                queue_family = i;
+                queue.family = i;
                 break;
             }
         }
 
         std::cout << "physical device = " << physical_device << std::endl
-                  << "queue family = " << queue_family << std::endl;
+                  << "queue family = " << queue.family << std::endl;
 
         return true;
     }
@@ -206,7 +256,7 @@ public:
         queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queue_info.pNext = nullptr;
         queue_info.flags = 0;
-        queue_info.queueFamilyIndex = queue_family;
+        queue_info.queueFamilyIndex = queue.family;
         queue_info.queueCount = 1;
         queue_info.pQueuePriorities = &queue_priority;
 
@@ -240,31 +290,31 @@ public:
         cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         cmd_pool_info.pNext = nullptr;
         cmd_pool_info.flags = 0;
-        cmd_pool_info.queueFamilyIndex = queue_family;
+        cmd_pool_info.queueFamilyIndex = queue.family;
 
-        VkResult rslt = vkCreateCommandPool(device, &cmd_pool_info, nullptr, &cmd_pool);
+        VkResult rslt = vkCreateCommandPool(device, &cmd_pool_info, nullptr, &queue.pool);
 
         if (rslt == VK_SUCCESS) {
-            std::cout << "Command pool created: " << cmd_pool << std::endl;
+            std::cout << "Command pool created: " << queue.pool << std::endl;
         } else {
-            std::cerr << "Error: " << rslt << " command pool = " << cmd_pool << std::endl;
+            std::cerr << "Error: " << rslt << " command pool = " << queue.pool << std::endl;
             return false;
         }
 
         VkCommandBufferAllocateInfo cmd_buf_info;
         cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         cmd_buf_info.pNext = nullptr;
-        cmd_buf_info.commandPool = cmd_pool;
+        cmd_buf_info.commandPool = queue.pool;
         cmd_buf_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         cmd_buf_info.commandBufferCount = 1;
 
-        rslt = vkAllocateCommandBuffers(device, &cmd_buf_info, &cmd_buf);
+        rslt = vkAllocateCommandBuffers(device, &cmd_buf_info, &queue.buffer);
 
         if (rslt == VK_SUCCESS) {
-            std::cout << "Command buffer created: " << cmd_buf << std::endl;
+            std::cout << "Command buffer created: " << queue.buffer << std::endl;
             return true;
         } else {
-            std::cerr << "Error: " << rslt << " command buf = " << cmd_buf << std::endl;
+            std::cerr << "Error: " << rslt << " command buf = " << queue.buffer << std::endl;
             return false;
         }
     }
@@ -305,32 +355,171 @@ public:
         create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         create_info.queueFamilyIndexCount = 1;
-        create_info.pQueueFamilyIndices = &queue_family;
+        create_info.pQueueFamilyIndices = &queue.family;
         create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
         create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
         create_info.clipped = VK_TRUE;
         create_info.oldSwapchain = VK_NULL_HANDLE;
 
-        VkResult rslt = vkCreateSwapchainKHR(device, &create_info, nullptr, &swapchain);
+        VkResult rslt = vkCreateSwapchainKHR(device, &create_info, nullptr, &swapchain.swapchain);
         if (rslt == VK_SUCCESS) {
-            std::cout << "Created swapchain: " << swapchain << std::endl;
-            return true;
+            std::cout << "Created swapchain: " << swapchain.swapchain << std::endl;
         } else {
-            std::cerr << "Error: " << rslt << " swapchain = " << swapchain << std::endl;
+            std::cerr << "Error: " << rslt << " swapchain = " << swapchain.swapchain << std::endl;
             return false;
         }
+
+        uint32_t num_swapchain_images = 0;
+        vkGetSwapchainImagesKHR(device, swapchain.swapchain, &num_swapchain_images, nullptr);
+
+        swapchain.images.resize(num_swapchain_images);
+
+        std::vector<VkImage> swapchain_images(num_swapchain_images);
+        vkGetSwapchainImagesKHR(device, swapchain.swapchain, &num_swapchain_images, swapchain_images.data());
+
+        for (unsigned int i = 0; i < swapchain_images.size(); ++i) {
+            std::cout << "Swapchain image: " << swapchain_images[i] << std::endl;
+            swapchain.images[i].image = swapchain_images[i];
+
+            VkImageViewCreateInfo create_info;
+            create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            create_info.pNext = nullptr;
+            create_info.flags = 0;
+            create_info.image = swapchain.images[i].image;
+            create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            create_info.format = formats[0].format;
+            create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+            create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+            create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+            create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+            create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            create_info.subresourceRange.baseMipLevel = 0;
+            create_info.subresourceRange.levelCount = 1;
+            create_info.subresourceRange.baseArrayLayer = 0;
+            create_info.subresourceRange.layerCount = 1;
+
+            vkCreateImageView(device, &create_info, nullptr, &swapchain.images[i].view);
+
+            if (rslt == VK_SUCCESS) {
+                std::cout << "Created image view for swapchain " << swapchain.swapchain << " image " << i
+                          << ": " << swapchain.images[i].view << std::endl;
+            } else {
+                std::cerr << "Could not create image view for swapchain " << swapchain.swapchain << " image " << i
+                          << ": " << rslt << " view = " << swapchain.images[i].view << std::endl;
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    VkInstance instance;
-    VkPhysicalDevice physical_device;
-    VkDevice device;
-    VkCommandPool cmd_pool;
-    VkCommandBuffer cmd_buf;
-    VkSurfaceKHR surface;
-    VkSwapchainKHR swapchain;
+    bool initDepthBuffer() {
+        VkSurfaceCapabilitiesKHR surf_caps;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surf_caps);
 
-    uint32_t queue_family;
+        VkImageCreateInfo create_info;
+        create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        create_info.pNext = nullptr;
+        create_info.flags = 0;
+        create_info.imageType = VK_IMAGE_TYPE_2D;
+        create_info.format = VK_FORMAT_D16_UNORM;
+        create_info.extent.width = surf_caps.currentExtent.width;
+        create_info.extent.height = surf_caps.currentExtent.height;
+        create_info.extent.depth = 1;
+        create_info.mipLevels = 1;
+        create_info.arrayLayers = 1;
+        create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+        create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        create_info.queueFamilyIndexCount = 1;
+        create_info.pQueueFamilyIndices = &queue.family;
+        create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        VkResult rslt = vkCreateImage(device, &create_info, nullptr, &depth_buffer.image);
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Created depth buffer image: " << depth_buffer.image << std::endl;
+        } else {
+            std::cerr << "Error: " << rslt << " depth_buffer_image = " << depth_buffer.image << std::endl;
+            return false;
+        }
+
+        VkMemoryRequirements mem_req;
+        vkGetImageMemoryRequirements(device, depth_buffer.image, &mem_req);
+
+        std::cout << "Depth buffer requires " << mem_req.size << " bytes aligned at " << mem_req.alignment
+                  << " memory type bits = " << mem_req.memoryTypeBits << std::endl;
+
+        VkMemoryAllocateInfo alloc_info;
+        alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        alloc_info.pNext = nullptr;
+        alloc_info.allocationSize = mem_req.size;
+        alloc_info.memoryTypeIndex = UINT32_MAX;
+
+        VkPhysicalDeviceMemoryProperties mem_props;
+        vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_props);
+
+        uint32_t type_bits = mem_req.memoryTypeBits;
+        for (unsigned int i = 0; i < mem_props.memoryTypeCount; ++i) {
+            if ((type_bits & 1) == 1) {
+                alloc_info.memoryTypeIndex = i;
+                break;
+            }
+            type_bits >>= 1;
+        }
+
+        if (alloc_info.memoryTypeIndex >= mem_props.memoryTypeCount) {
+            std::cerr << "Could not find an appropriate memory type for depth buffer." << std::endl;
+            return false;
+        } else {
+            std::cout << "Chose memory type " << alloc_info.memoryTypeIndex << " for depth buffer." << std::endl;
+        }
+
+        rslt = vkAllocateMemory(device, &alloc_info, nullptr, &depth_buffer.memory);
+
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Allocated memory for depth buffer: " << depth_buffer.memory << std::endl;
+        } else {
+            std::cerr << "Could not allocate memory for depth buffer: " << rslt << " depth buffer memory = " << depth_buffer.memory << std::endl;
+            return false;
+        }
+
+        rslt = vkBindImageMemory(device, depth_buffer.image, depth_buffer.memory, 0);
+
+        if (rslt != VK_SUCCESS) {
+            std::cerr << "Could not bind memory " << depth_buffer.memory << " to depth buffer " << depth_buffer.image << ": " << rslt << std::endl;
+            return false;
+        }
+
+        VkImageViewCreateInfo iv_create_info;
+        iv_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        iv_create_info.pNext = nullptr;
+        iv_create_info.flags = 0;
+        iv_create_info.image = depth_buffer.image;
+        iv_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        iv_create_info.format = create_info.format;
+        iv_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+        iv_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+        iv_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+        iv_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+        iv_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        iv_create_info.subresourceRange.baseMipLevel = 0;
+        iv_create_info.subresourceRange.levelCount = 1;
+        iv_create_info.subresourceRange.baseArrayLayer = 0;
+        iv_create_info.subresourceRange.layerCount = 1;
+
+        rslt = vkCreateImageView(device, &iv_create_info, nullptr, &depth_buffer.view);
+
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Created depth buffer image view: " << depth_buffer.view << std::endl;
+        } else {
+            std::cerr << "Could not create depth buffer image view: " << rslt << " depth buffer image view = " << depth_buffer.view << std::endl;
+            return false;
+        }
+
+        return true;
+    }
 };
 
 int main(int argc, char **argv) {
@@ -367,6 +556,10 @@ int main(int argc, char **argv) {
     }
 
     if (!app.initCommandBuffer()) {
+        std::exit(1);
+    }
+
+    if (!app.initDepthBuffer()) {
         std::exit(1);
     }
 

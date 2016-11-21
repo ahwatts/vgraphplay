@@ -143,13 +143,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\vgraphplay\utils.h" />
-    <ClInclude Include="..\..\vgraphplay\win32.h" />
+    <ClCompile Include="..\..\vgraphplay\Graphics.cpp" />
+    <ClCompile Include="..\..\vgraphplay\System.cpp" />
+    <ClCompile Include="..\..\vgraphplay\vgraphplay.cpp" />
+    <ClCompile Include="..\..\vgraphplay\VulkanOutput.cpp" />
+    <ClCompile Include="..\..\vgraphplay\Win32.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\vgraphplay\utils.cpp" />
-    <ClCompile Include="..\..\vgraphplay\vgraphplay.cpp" />
-    <ClCompile Include="..\..\vgraphplay\win32.cpp" />
+    <ClInclude Include="..\..\vgraphplay\Graphics.h" />
+    <ClInclude Include="..\..\vgraphplay\System.h" />
+    <ClInclude Include="..\..\vgraphplay\vulkan.h" />
+    <ClInclude Include="..\..\vgraphplay\VulkanOutput.h" />
+    <ClInclude Include="..\..\vgraphplay\Win32.h" />
+    <ClInclude Include="..\..\vgraphplay\windows.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -9,18 +9,26 @@
 
 #include <windows.h>
 
-class Win32Context {
-public:
-    Win32Context();
-    ~Win32Context();
+#include "System.h"
 
-    bool initWindow(LONG width, LONG height);
-    void mainLoop();
+namespace vgraphplay {
+    class Graphics;
 
-    HINSTANCE hInstance;
-    HWND hWnd;
-};
+    class Win32System : public System {
+    public:
+        Win32System();
+        virtual ~Win32System();
 
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+        virtual bool initWindow(unsigned int width, unsigned int height) override;
+        virtual void addExtensionNames(std::vector<const char *> &extensions) override;
+        virtual bool initSurface(Graphics &graphics) override;
+        virtual void mainLoop() override;
+
+        HINSTANCE hInstance;
+        HWND hWnd;
+    };
+
+    LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+}
 
 #endif

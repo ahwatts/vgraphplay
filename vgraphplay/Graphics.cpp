@@ -15,10 +15,24 @@ namespace vgraphplay {
           surface{VK_NULL_HANDLE},
           queue{UINT32_MAX, VK_NULL_HANDLE, VK_NULL_HANDLE},
           swapchain{VK_NULL_HANDLE, {}},
-          depth_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE}
+          depth_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE},
+          uniforms{},
+          uniform_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE}
     {}
 
     Graphics::~Graphics() {
+        if (device != VK_NULL_HANDLE && uniform_buffer.buffer != VK_NULL_HANDLE) {
+            std::cout << "Destroying uniform buffer: "
+                      << uniform_buffer.buffer << std::endl;
+            vkDestroyBuffer(device, uniform_buffer.buffer, nullptr);
+        }
+
+        if (device != VK_NULL_HANDLE && uniform_buffer.memory != VK_NULL_HANDLE) {
+            std::cout << "Freeing uniform buffer memory: "
+                      << uniform_buffer.memory << std::endl;
+            vkFreeMemory(device, uniform_buffer.memory, nullptr);
+        }
+
         if (device != VK_NULL_HANDLE && depth_buffer.view != VK_NULL_HANDLE) {
             std::cout << "Destroying depth buffer image view: "
                       << depth_buffer.view << std::endl;
@@ -86,7 +100,8 @@ namespace vgraphplay {
             initDevice() &&
             initCommandQueue() &&
             initSwapchain() &&
-            initDepthBuffer();
+            initDepthBuffer() &&
+            initUniformBuffer();
     }
 
     bool Graphics::initInstance(System *sys) {
@@ -471,6 +486,91 @@ namespace vgraphplay {
             std::cout << "Created depth buffer image view: " << depth_buffer.view << std::endl;
         } else {
             std::cerr << "Could not create depth buffer image view: " << rslt << " depth buffer image view = " << depth_buffer.view << std::endl;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool Graphics::initUniformBuffer() {
+        VkBufferCreateInfo buf_ci;
+        buf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        buf_ci.pNext = nullptr;
+        buf_ci.flags = 0;
+        buf_ci.size = sizeof(Uniforms);
+        buf_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        buf_ci.queueFamilyIndexCount = 1;
+        buf_ci.pQueueFamilyIndices = &queue.family;
+
+        VkResult rslt = vkCreateBuffer(device, &buf_ci, nullptr, &uniform_buffer.buffer);
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Created uniform buffer: " << uniform_buffer.buffer << std::endl;
+        } else {
+            std::cerr << "Could not create uniform buffer: " << rslt << " uniform_buffer.buffer = " << uniform_buffer.buffer << std::endl;
+            return false;
+        }
+
+        VkMemoryRequirements mem_reqs;
+        vkGetBufferMemoryRequirements(device, uniform_buffer.buffer, &mem_reqs);
+
+        std::cout << "Uniform buffer requires " << mem_reqs.size << " bytes aligned at " << mem_reqs.alignment
+                  << " memory type bits = " << mem_reqs.memoryTypeBits << std::endl;
+
+        VkMemoryAllocateInfo alloc_info;
+        alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        alloc_info.pNext = nullptr;
+        alloc_info.allocationSize = mem_reqs.size;
+        alloc_info.memoryTypeIndex = UINT32_MAX;
+
+        VkPhysicalDeviceMemoryProperties mem_props;
+        vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_props);
+
+        uint32_t type_bits = mem_reqs.memoryTypeBits;
+        for (unsigned int i = 0; i < mem_props.memoryTypeCount; ++i) {
+            if (type_bits & (1 << i) &&
+                mem_props.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT &&
+                mem_props.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+            {
+                alloc_info.memoryTypeIndex = i;
+                break;
+            }
+        }
+
+        if (alloc_info.memoryTypeIndex >= mem_props.memoryTypeCount) {
+            std::cerr << "Could not find an appropriate memory type for uniform buffer." << std::endl;
+            return false;
+        } else {
+            std::cout << "Chose memory type " << alloc_info.memoryTypeIndex << " for uniform buffer." << std::endl;
+        }
+
+        rslt = vkAllocateMemory(device, &alloc_info, nullptr, &uniform_buffer.memory);
+
+        if (rslt == VK_SUCCESS) {
+            std::cout << "Allocated memory for uniform buffer: " << uniform_buffer.memory << std::endl;
+        } else {
+            std::cerr << "Could not allocate memory for uniform buffer: " << rslt << " uniform buffer memory = " << uniform_buffer.memory << std::endl;
+            return false;
+        }
+
+        Uniforms *mapped_uniforms = nullptr;
+        rslt = vkMapMemory(device, uniform_buffer.memory, 0, mem_reqs.size, 0, (void**)(&mapped_uniforms));
+
+        if (rslt != VK_SUCCESS) {
+            std::cerr << "Could not map uniform buffer memory" << rslt << std::endl;
+            return false;
+        }
+
+        *mapped_uniforms = uniforms;
+
+        vkUnmapMemory(device, uniform_buffer.memory);
+
+        rslt = vkBindBufferMemory(device, uniform_buffer.buffer, uniform_buffer.memory, 0);
+
+        if (rslt != VK_SUCCESS) {
+            std::cerr << "Could not bind buffer memory " << uniform_buffer.memory
+                      << " to uniform buffer " << uniform_buffer.buffer
+                      << ": " << rslt << std::endl;
             return false;
         }
 

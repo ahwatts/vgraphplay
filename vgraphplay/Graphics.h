@@ -5,6 +5,11 @@
 
 #include <vector>
 
+#include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
+#include <glm/mat3x3.hpp>
+#include <glm/mat4x4.hpp>
+
 #include "vulkan.h"
 
 namespace vgraphplay {
@@ -32,6 +37,42 @@ namespace vgraphplay {
         VkDeviceMemory memory;
     };
 
+    struct BufferInfo {
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+    };
+
+    struct Light {
+        Light()
+            : enabled{false},
+              position{0.0, 0.0, 0.0},
+              color{1.0, 1.0, 1.0, 1.0},
+              specular_exp{0}
+        {}
+
+        bool enabled;
+        glm::vec3 position;
+        glm::vec4 color;
+        unsigned int specular_exp;
+    };
+
+    struct Uniforms {
+        Uniforms()
+            : model{1},
+              model_inv_trans_3{1},
+              view{1},
+              view_inv{1},
+              projection{1}
+        {}
+
+        glm::mat4x4 model;
+        glm::mat3x3 model_inv_trans_3;
+        glm::mat4x4 view;
+        glm::mat4x4 view_inv;
+        glm::mat4x4 projection;
+        Light lights[10];
+    };
+
     class Graphics {
     public:
         VkInstance instance;
@@ -42,6 +83,9 @@ namespace vgraphplay {
         CommandQueueInfo queue;
         SwapchainInfo swapchain;
         ImageInfo depth_buffer;
+
+        Uniforms uniforms;
+        BufferInfo uniform_buffer;
 
         // Create the object; doesn't set up the Vulkan stuff.
         Graphics();

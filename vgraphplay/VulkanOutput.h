@@ -5,7 +5,7 @@
 
 #include <iostream>
 
-#include <vulkan/vulkan.h>
+#include "vulkan.h"
 
 namespace vgraphplay {
     std::ostream& operator<<(std::ostream &stream, const VkLayerProperties &layer_props);

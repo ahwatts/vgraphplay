@@ -4,12 +4,12 @@
 
 #include <iostream>
 
-#include "System.h"
 #include "VulkanOutput.h"
 
 namespace vgraphplay {
     Graphics::Graphics()
-        : instance{VK_NULL_HANDLE},
+        : window{nullptr},
+          instance{VK_NULL_HANDLE},
           physical_device{VK_NULL_HANDLE},
           device{VK_NULL_HANDLE},
           surface{VK_NULL_HANDLE},
@@ -21,34 +21,43 @@ namespace vgraphplay {
     {}
 
     Graphics::~Graphics() {
+        shutDown();
+    }
+
+    void Graphics::shutDown() {
         if (device != VK_NULL_HANDLE && uniform_buffer.buffer != VK_NULL_HANDLE) {
             std::cout << "Destroying uniform buffer: "
                       << uniform_buffer.buffer << std::endl;
             vkDestroyBuffer(device, uniform_buffer.buffer, nullptr);
+            uniform_buffer.buffer = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE && uniform_buffer.memory != VK_NULL_HANDLE) {
             std::cout << "Freeing uniform buffer memory: "
                       << uniform_buffer.memory << std::endl;
             vkFreeMemory(device, uniform_buffer.memory, nullptr);
+            uniform_buffer.memory = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE && depth_buffer.view != VK_NULL_HANDLE) {
             std::cout << "Destroying depth buffer image view: "
                       << depth_buffer.view << std::endl;
             vkDestroyImageView(device, depth_buffer.view, nullptr);
+            depth_buffer.view = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE && depth_buffer.image != VK_NULL_HANDLE) {
             std::cout << "Destroying depth buffer image: "
                       << depth_buffer.image << std::endl;
             vkDestroyImage(device, depth_buffer.image, nullptr);
+            depth_buffer.image = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE && depth_buffer.memory != VK_NULL_HANDLE) {
             std::cout << "Freeing depth buffer memory: "
                       << depth_buffer.memory << std::endl;
             vkFreeMemory(device, depth_buffer.memory, nullptr);
+            depth_buffer.memory = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE && queue.pool != VK_NULL_HANDLE) {
@@ -56,11 +65,13 @@ namespace vgraphplay {
                 std::cout << "Freeing command buffer: "
                           << queue.buffer << std::endl;
                 vkFreeCommandBuffers(device, queue.pool, 1, &queue.buffer);
+                queue.buffer = VK_NULL_HANDLE;
             }
 
             std::cout << "Destroying command pool: "
                       << queue.pool << std::endl;
             vkDestroyCommandPool(device, queue.pool, nullptr);
+            queue.pool = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE && swapchain.swapchain != VK_NULL_HANDLE) {
@@ -68,43 +79,75 @@ namespace vgraphplay {
                 std::cout << "Destroying swapchain image view: "
                           << image.view << std::endl;
                 vkDestroyImageView(device, image.view, nullptr);
+                image.view = VK_NULL_HANDLE;
             }
 
             std::cout << "Destroying swapchain: "
                       << swapchain.swapchain << std::endl;
             vkDestroySwapchainKHR(device, swapchain.swapchain, nullptr);
+            swapchain.swapchain = VK_NULL_HANDLE;
         }
 
         if (device != VK_NULL_HANDLE) {
             std::cout << "Destroying device: "
                       << device << std::endl;
             vkDestroyDevice(device, nullptr);
+            device = VK_NULL_HANDLE;
         }
 
         if (instance != VK_NULL_HANDLE && surface != VK_NULL_HANDLE) {
             std::cout << "Destroying surface: "
                       << surface << std::endl;
             vkDestroySurfaceKHR(instance, surface, nullptr);
+            surface = VK_NULL_HANDLE;
         }
 
         if (instance != VK_NULL_HANDLE) {
             std::cout << "Destroying instance: "
                       << instance << std::endl;
             vkDestroyInstance(instance, nullptr);
+            instance = VK_NULL_HANDLE;
         }
     }
 
-    bool Graphics::initialize(System *sys) {
-        return initInstance(sys) &&
-            sys->initSurface(*this) &&
-            initDevice() &&
-            initCommandQueue() &&
-            initSwapchain() &&
-            initDepthBuffer() &&
-            initUniformBuffer();
+    bool Graphics::initialize(GLFWwindow *_window) {
+        if (!initInstance()) {
+            std::cerr << "Failed to create Vulkan instance." << std::endl;
+            return false;
+        }
+
+        window = _window;
+        glfwCreateWindowSurface(instance, window, nullptr, &surface);
+
+        if (!initDevice()) {
+            std::cerr << "Failed to create Vulkan device." << std::endl;
+            return false;
+        }
+
+        if (!initCommandQueue()) {
+            std::cerr << "Failed to create Vulkan command queue." << std::endl;
+            return false;
+        }
+
+        if (!initSwapchain()) {
+            std::cerr << "Failed to create swapchain." << std::endl;
+            return false;
+        }
+
+        if (!initDepthBuffer()) {
+            std::cerr << "Failed to create depth buffer." << std::endl;
+            return false;
+        }
+
+        if (!initUniformBuffer()) {
+            std::cerr << "Failed to create uniform buffer." << std::endl;
+            return false;
+        }
+
+        return true;
     }
 
-    bool Graphics::initInstance(System *sys) {
+    bool Graphics::initInstance() {
         uint32_t num_extensions;
         vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
         std::vector<VkExtensionProperties> extensions(num_extensions);
@@ -122,14 +165,14 @@ namespace vgraphplay {
         for (auto&& layer : layers) {
             std::cout << "Layer: " << layer << std::endl;
 
-            // uint32_t num_extensions;
-            // vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
-            // std::vector<VkExtensionProperties> extensions(num_extensions);
-            // vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
+            uint32_t num_extensions;
+            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
+            std::vector<VkExtensionProperties> extensions(num_extensions);
+            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
 
-            // for (auto&& extension : extensions) {
-            //     std::cout << "  Extension: " << extension << std::endl;
-            // }
+            for (auto&& extension : extensions) {
+                std::cout << "  Extension: " << extension << std::endl;
+            }
         }
 
         VkInstanceCreateInfo create_info;
@@ -140,10 +183,12 @@ namespace vgraphplay {
         create_info.ppEnabledLayerNames = nullptr;
 
         std::vector<const char*> extension_names;
-        extension_names.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
-
-        // Choose a platform-specific surface extension.
-        sys->addExtensionNames(extension_names);
+        uint32_t glfw_extension_count;
+        const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+        for (unsigned int i = 0; i < glfw_extension_count; ++i) {
+            std::cout << "GLFW requires extension: " << glfw_extensions[i] << std::endl;
+            extension_names.emplace_back(glfw_extensions[i]);
+        }
 
         create_info.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
         create_info.ppEnabledExtensionNames = extension_names.data();

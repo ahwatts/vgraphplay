@@ -5,16 +5,14 @@
 
 #include <vector>
 
+#include "vulkan.h"
+
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
 
-#include "vulkan.h"
-
 namespace vgraphplay {
-    class System;
-
     struct CommandQueueInfo {
         uint32_t family;
         VkCommandPool pool;
@@ -75,6 +73,8 @@ namespace vgraphplay {
 
     class Graphics {
     public:
+        GLFWwindow *window;
+
         VkInstance instance;
         VkPhysicalDevice physical_device;
         VkDevice device;
@@ -92,11 +92,12 @@ namespace vgraphplay {
         ~Graphics();
 
         // Set up all the Vulkan stuff.
-        bool initialize(System *sys);
+        bool initialize(GLFWwindow *window);
+        void shutDown();
 
     protected:
         // The sub-parts of initialize.
-        bool initInstance(System *sys);
+        bool initInstance();
         bool initDevice();
         bool initCommandQueue();
         bool initSwapchain();

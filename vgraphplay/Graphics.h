@@ -40,6 +40,11 @@ namespace vgraphplay {
         VkDeviceMemory memory;
     };
 
+    struct ShaderInfo {
+        std::vector<char> bytecode;
+        VkShaderModule module;
+    };
+
     struct Light {
         Light()
             : enabled{false},
@@ -87,6 +92,8 @@ namespace vgraphplay {
         Uniforms uniforms;
         BufferInfo uniform_buffer;
 
+        ShaderInfo unlit_vertex, unlit_fragment;
+
         // Create the object; doesn't set up the Vulkan stuff.
         Graphics();
         ~Graphics();
@@ -103,6 +110,7 @@ namespace vgraphplay {
         bool initSwapchain();
         bool initDepthBuffer();
         bool initUniformBuffer();
+        bool initPipelineLayout();
     };
 }
 

@@ -2,6 +2,7 @@
 
 #include "Graphics.h"
 
+#include <fstream>
 #include <iostream>
 
 #include "VulkanOutput.h"
@@ -17,7 +18,9 @@ namespace vgraphplay {
           swapchain{VK_NULL_HANDLE, {}},
           depth_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE},
           uniforms{},
-          uniform_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE}
+          uniform_buffer{VK_NULL_HANDLE, VK_NULL_HANDLE},
+          unlit_vertex{{}, VK_NULL_HANDLE},
+          unlit_fragment{{}, VK_NULL_HANDLE}
     {}
 
     Graphics::~Graphics() {
@@ -25,6 +28,18 @@ namespace vgraphplay {
     }
 
     void Graphics::shutDown() {
+        if (device != VK_NULL_HANDLE && unlit_vertex.module != VK_NULL_HANDLE) {
+            std::cout << "Destroying unlit vertex shader module: "
+                      << unlit_vertex.module << std::endl;
+            vkDestroyShaderModule(device, unlit_vertex.module, nullptr);
+        }
+
+        if (device != VK_NULL_HANDLE && unlit_fragment.module != VK_NULL_HANDLE) {
+            std::cout << "Destroying unlit fragment shader module: "
+                      << unlit_fragment.module << std::endl;
+            vkDestroyShaderModule(device, unlit_fragment.module, nullptr);
+        }
+
         if (device != VK_NULL_HANDLE && uniform_buffer.buffer != VK_NULL_HANDLE) {
             std::cout << "Destroying uniform buffer: "
                       << uniform_buffer.buffer << std::endl;
@@ -141,6 +156,11 @@ namespace vgraphplay {
 
         if (!initUniformBuffer()) {
             std::cerr << "Failed to create uniform buffer." << std::endl;
+            return false;
+        }
+
+        if (!initPipelineLayout()) {
+            std::cerr << "Failed to create pipeline layout." << std::endl;
             return false;
         }
 
@@ -617,6 +637,51 @@ namespace vgraphplay {
                       << " to uniform buffer " << uniform_buffer.buffer
                       << ": " << rslt << std::endl;
             return false;
+        }
+
+        return true;
+    }
+
+    std::vector<char> loadShaderBytecode(const std::string &filename) {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        size_t file_size = (size_t)file.tellg();
+        std::vector<char> bytecode(file_size);
+        file.seekg(0);
+        file.read(bytecode.data(), file_size);
+        file.close();
+        return bytecode;
+    }
+
+    bool Graphics::initPipelineLayout() {
+        std::vector<char> bytecode = loadShaderBytecode("shaders/unlit.vert.spv");
+        VkShaderModuleCreateInfo shader_ci;
+        shader_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shader_ci.pNext = nullptr;
+        shader_ci.flags = 0;
+        shader_ci.codeSize = bytecode.size();
+        shader_ci.pCode = reinterpret_cast<uint32_t *>(bytecode.data());
+
+        VkResult rslt = vkCreateShaderModule(device, &shader_ci, nullptr, &unlit_vertex.module);
+        if (rslt != VK_SUCCESS) {
+            std::cerr << "Failed to create unlit vertex shader: " << rslt << " vertex_shader = " << unlit_vertex.module << std::endl;
+            return false;
+        } else {
+            std::cout << "Created unlit vertex shader module " << unlit_vertex.module << std::endl;
+        }
+
+        bytecode = loadShaderBytecode("shaders/unlit.frag.spv");
+        shader_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shader_ci.pNext = nullptr;
+        shader_ci.flags = 0;
+        shader_ci.codeSize = bytecode.size();
+        shader_ci.pCode = reinterpret_cast<uint32_t *>(bytecode.data());
+
+        rslt = vkCreateShaderModule(device, &shader_ci, nullptr, &unlit_fragment.module);
+        if (rslt != VK_SUCCESS) {
+            std::cerr << "Failed to create unlit fragment shader: " << rslt << " vertex_shader = " << unlit_fragment.module << std::endl;
+            return false;
+        } else {
+            std::cout << "Created unlit fragment shader module " << unlit_fragment.module << std::endl;
         }
 
         return true;

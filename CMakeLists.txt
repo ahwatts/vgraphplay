@@ -42,3 +42,4 @@ message(STATUS "Found glm include: " ${GLM_INCLUDE_DIRS})
 include_directories(AFTER SYSTEM ${Vulkan_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS})
 
 add_subdirectory(vgraphplay)
+add_subdirectory(shaders)

@@ -5,3 +5,4 @@
 /msvc/vgraphplay/x64
 /msvc/x64
 *.suo
+gmon.out

@@ -4,5 +4,6 @@ add_executable(vgraphplay
   vgraphplay.cpp)
 
 target_link_libraries(vgraphplay
+  ${Boost_LIBRARIES}
   ${Vulkan_LIBRARIES}
   ${GLFW_LIBRARIES})

@@ -13,7 +13,7 @@ void initGLFW(int width, int height, const char *title, GLFWwindow **window);
 void handleGLFWError(int code, const char *desc);
 void bailout(const std::string &msg);
 
-static Graphics GFX;
+static gfx::System GFX;
 const int WIDTH = 1024;
 const int HEIGHT = 768;
 
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
         glfwPollEvents();
     }
 
-    GFX.shutDown();
+    // GFX.shutDown();
     glfwTerminate();
     return 0;
 }
@@ -54,7 +54,7 @@ void handleGLFWError(int code, const char *desc) {
 
 void bailout(const std::string &msg) {
     std::cerr << msg << std::endl;
-    GFX.shutDown();
+    // GFX.shutDown();
     glfwTerminate();
     std::exit(1);
 }

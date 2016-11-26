@@ -17,6 +17,11 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS "-Wall")
 endif(CMAKE_COMPILER_IS_GNUCXX)
 
+find_package(Boost REQUIRED COMPONENTS log)
+message(STATUS "Found Boost version: " ${Boost_VERSION})
+message(STATUS "Found Boost headers: " ${Boost_INCLUDE_DIRS})
+message(STATUS "Found Boost libs:    " ${Boost_LIBRARIES})
+
 find_package(Vulkan REQUIRED)
 message(STATUS "Found Vulkan headers: " ${Vulkan_INCLUDE_DIRS})
 message(STATUS "Found Vulkan libs:    " ${Vulkan_LIBRARIES})
@@ -39,7 +44,11 @@ find_path(GLM_INCLUDE_PATH glm/glm.hpp)
 set(GLM_INCLUDE_DIRS ${GLM_INCLUDE_PATH})
 message(STATUS "Found glm include: " ${GLM_INCLUDE_DIRS})
 
-include_directories(AFTER SYSTEM ${Vulkan_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS})
+include_directories(AFTER SYSTEM
+  ${Boost_INCLUDE_DIRS}
+  ${Vulkan_INCLUDE_DIRS}
+  ${GLFW_INCLUDE_DIRS}
+  ${GLM_INCLUDE_DIRS})
 
 add_subdirectory(vgraphplay)
 add_subdirectory(shaders)

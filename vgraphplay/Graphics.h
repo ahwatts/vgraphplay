@@ -76,42 +76,74 @@ namespace vgraphplay {
         Light lights[10];
     };
 
-    class Graphics {
-    public:
-        GLFWwindow *window;
+    // class Graphics {
+    // public:
+    //     GLFWwindow *window;
 
-        VkInstance instance;
-        VkPhysicalDevice physical_device;
-        VkDevice device;
-        VkSurfaceKHR surface;
+    //     VkInstance instance;
+    //     VkPhysicalDevice physical_device;
+    //     VkDevice device;
+    //     VkSurfaceKHR surface;
 
-        CommandQueueInfo queue;
-        SwapchainInfo swapchain;
-        ImageInfo depth_buffer;
+    //     CommandQueueInfo queue;
+    //     SwapchainInfo swapchain;
+    //     ImageInfo depth_buffer;
 
-        Uniforms uniforms;
-        BufferInfo uniform_buffer;
+    //     Uniforms uniforms;
+    //     BufferInfo uniform_buffer;
 
-        ShaderInfo unlit_vertex, unlit_fragment;
+    //     ShaderInfo unlit_vertex, unlit_fragment;
 
-        // Create the object; doesn't set up the Vulkan stuff.
-        Graphics();
-        ~Graphics();
+    //     // Create the object; doesn't set up the Vulkan stuff.
+    //     Graphics();
+    //     ~Graphics();
 
-        // Set up all the Vulkan stuff.
-        bool initialize(GLFWwindow *window);
-        void shutDown();
+    //     // Set up all the Vulkan stuff.
+    //     bool initialize(GLFWwindow *window);
+    //     void shutDown();
 
-    protected:
-        // The sub-parts of initialize.
-        bool initInstance();
-        bool initDevice();
-        bool initCommandQueue();
-        bool initSwapchain();
-        bool initDepthBuffer();
-        bool initUniformBuffer();
-        bool initPipelineLayout();
-    };
+    // protected:
+    //     // The sub-parts of initialize.
+    //     bool initInstance();
+    //     bool initDevice();
+    //     bool initCommandQueue();
+    //     bool initSwapchain();
+    //     bool initDepthBuffer();
+    //     bool initUniformBuffer();
+    //     bool initPipelineLayout();
+    // };
+
+    namespace gfx {
+        class System;
+        class Device;
+        class Surface;
+
+        class Device {
+        public:
+            Device(System *parent);
+            ~Device();
+
+            bool initialize();
+
+        protected:
+            System *m_parent;
+            VkDevice m_device;
+            VkPhysicalDevice m_physical_device;
+        };
+
+        class System {
+        public:
+            System();
+            ~System();
+
+            bool initialize(GLFWwindow *window);
+
+        protected:
+            GLFWwindow *m_window;
+            VkInstance m_instance;
+            Device m_device;
+        };
+    }
 }
 
 #endif

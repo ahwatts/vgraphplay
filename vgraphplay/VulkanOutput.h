@@ -11,6 +11,7 @@ namespace vgraphplay {
     void logGlobalExtensions();
     void logGlobalLayers();
     void logPhysicalDevices(VkInstance instance);
+    void logQueueFamilies(VkPhysicalDevice device);
 
     // Structs.
     std::ostream& operator<<(std::ostream&, const VkExtensionProperties&);

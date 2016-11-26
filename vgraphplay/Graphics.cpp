@@ -18,11 +18,7 @@ namespace vgraphplay {
         {}
 
         System::~System() {
-            if (m_instance != VK_NULL_HANDLE) {
-                BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
-                vkDestroyInstance(m_instance, nullptr);
-                m_instance = VK_NULL_HANDLE;
-            }
+            dispose();
         }
 
         bool System::initialize() {
@@ -60,86 +56,104 @@ namespace vgraphplay {
             }
         }
 
+        void System::dispose() {
+            m_device.dispose();
+
+            if (m_instance != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
+                vkDestroyInstance(m_instance, nullptr);
+                m_instance = VK_NULL_HANDLE;
+            }
+        }
+
         Device::Device(System *parent)
             : m_parent{parent},
               m_device{VK_NULL_HANDLE},
-              m_physical_device{VK_NULL_HANDLE}
+              m_physical_device{VK_NULL_HANDLE},
+              m_queue_family{UINT32_MAX}
         {}
 
         Device::~Device() {
+            dispose();
+        }
+
+        bool Device::initialize() {
+            if (m_device != VK_NULL_HANDLE) {
+                return true;
+            }
+
+            logPhysicalDevices(m_parent->instance());
+
+            uint32_t num_devices;
+            vkEnumeratePhysicalDevices(m_parent->instance(), &num_devices, nullptr);
+            std::vector<VkPhysicalDevice> devices(num_devices);
+            vkEnumeratePhysicalDevices(m_parent->instance(), &num_devices, devices.data());
+
+            // We probably want to make a better decision than this...
+            m_physical_device = devices[0];
+
+            uint32_t num_queue_families = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, nullptr);
+            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
+            vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, queue_families.data());
+
+            // Choose the first graphics queue...
+            for (unsigned int i = 0; i < queue_families.size(); ++i) {
+                int supports_present = glfwGetPhysicalDevicePresentationSupport(m_parent->instance(), m_physical_device, i);
+
+                if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && supports_present == GLFW_TRUE) {
+                    m_queue_family = i;
+                    break;
+                }
+            }
+
+            BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device << " queue family = " << m_queue_family;
+
+            float queue_priority = 1.0;
+            VkDeviceQueueCreateInfo queue_ci;
+            queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queue_ci.pNext = nullptr;
+            queue_ci.flags = 0;
+            queue_ci.queueFamilyIndex = m_queue_family;
+            queue_ci.queueCount = 1;
+            queue_ci.pQueuePriorities = &queue_priority;
+
+            std::vector<const char*> extension_names;
+            extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+            VkDeviceCreateInfo device_ci;
+            device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+            device_ci.pNext = nullptr;
+            device_ci.queueCreateInfoCount = 1;
+            device_ci.pQueueCreateInfos = &queue_ci;
+            device_ci.enabledLayerCount = 0;
+            device_ci.ppEnabledLayerNames = nullptr;
+            device_ci.pEnabledFeatures = nullptr;
+            device_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
+            device_ci.ppEnabledExtensionNames = extension_names.data();
+
+            VkResult rslt = vkCreateDevice(m_physical_device, &device_ci, nullptr, &m_device);
+
+            if (rslt == VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(trace) << "Device created: " << m_device;
+                return true;
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
+                return false;
+            }
+        }
+
+        void Device::dispose() {
             if (m_device != VK_NULL_HANDLE) {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying device: " << m_device;
                 vkDestroyDevice(m_device, nullptr);
                 m_device = VK_NULL_HANDLE;
             }
-        }
 
-        bool Device::initialize() {
-            logPhysicalDevices(m_parent->instance());
-
-            // // We probably want to make a better decision than this...
-            // physical_device = devices[0];
-
-            // uint32_t num_queue_families = 0;
-            // vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &num_queue_families, nullptr);
-            // std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
-            // vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &num_queue_families, queue_families.data());
-
-            // for (unsigned int i = 0; i < queue_families.size(); ++i) {
-            //     std::cout << "  Queue family " << i << ": " << queue_families[i] << std::endl;
-
-            //     VkBool32 supports_present;
-            //     vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &supports_present);
-            //     std::cout << "    Can present to surface: " << supports_present << std::endl;
-            // }
-
-            // // Choose the first graphics queue...
-            // for (unsigned int i = 0; i < queue_families.size(); ++i) {
-            //     VkBool32 supports_present;
-            //     vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &supports_present);
-
-            //     if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && supports_present == VK_TRUE) {
-            //         queue.family = i;
-            //         break;
-            //     }
-            // }
-
-            // std::cout << "physical device = " << physical_device << std::endl
-            //           << "queue family = " << queue.family << std::endl;
-
-            // float queue_priority = 1.0;
-            // VkDeviceQueueCreateInfo queue_info;
-            // queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            // queue_info.pNext = nullptr;
-            // queue_info.flags = 0;
-            // queue_info.queueFamilyIndex = queue.family;
-            // queue_info.queueCount = 1;
-            // queue_info.pQueuePriorities = &queue_priority;
-
-            // VkDeviceCreateInfo device_info;
-            // device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-            // device_info.pNext = nullptr;
-            // device_info.queueCreateInfoCount = 1;
-            // device_info.pQueueCreateInfos = &queue_info;
-            // device_info.enabledLayerCount = 0;
-            // device_info.ppEnabledLayerNames = nullptr;
-            // device_info.pEnabledFeatures = nullptr;
-
-            // std::vector<const char*> extension_names;
-            // extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-            // device_info.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
-            // device_info.ppEnabledExtensionNames = extension_names.data();
-
-            // VkResult rslt = vkCreateDevice(physical_device, &device_info, nullptr, &device);
-
-            // if (rslt == VK_SUCCESS) {
-            //     std::cout << "Device Created: " << device << std::endl;
-            //     return true;
-            // } else {
-            //     std::cerr << "Error: " << rslt << " device = " << device << std::endl;
-            //     return false;
-            // }
-            return true;
+            // No need to actually destroy this; it's maintained by
+            // Vulkan.
+            m_physical_device = VK_NULL_HANDLE;
+            m_queue_family = UINT32_MAX;
         }
     }
 

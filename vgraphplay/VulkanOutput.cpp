@@ -78,6 +78,18 @@ namespace vgraphplay {
                 msg << std::endl << "  Memory type " << i << ": " << mem_props.memoryTypes[i];
             }
 
+            uint32_t num_queue_families = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, nullptr);
+            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
+            vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, queue_families.data());
+
+            for (unsigned int i = 0; i < queue_families.size(); ++i) {
+                msg << std::endl << "  Queue family " << i << ": " << queue_families[i];
+
+                int supports_present = glfwGetPhysicalDevicePresentationSupport(instance, device, i);
+                msg << " Can present: " << (supports_present == GLFW_TRUE);
+            }
+
             BOOST_LOG_TRIVIAL(trace) << msg.str();
         }
     }

@@ -13,68 +13,68 @@
 #include <glm/mat4x4.hpp>
 
 namespace vgraphplay {
-    struct CommandQueueInfo {
-        uint32_t family;
-        VkCommandPool pool;
-        VkCommandBuffer buffer;
-    };
+    // struct CommandQueueInfo {
+    //     uint32_t family;
+    //     VkCommandPool pool;
+    //     VkCommandBuffer buffer;
+    // };
 
-    struct SwapchainImageInfo {
-        VkImage image;
-        VkImageView view;
-    };
+    // struct SwapchainImageInfo {
+    //     VkImage image;
+    //     VkImageView view;
+    // };
 
-    struct SwapchainInfo {
-        VkSwapchainKHR swapchain;
-        std::vector<SwapchainImageInfo> images;
-    };
+    // struct SwapchainInfo {
+    //     VkSwapchainKHR swapchain;
+    //     std::vector<SwapchainImageInfo> images;
+    // };
 
-    struct ImageInfo {
-        VkImage image;
-        VkImageView view;
-        VkDeviceMemory memory;
-    };
+    // struct ImageInfo {
+    //     VkImage image;
+    //     VkImageView view;
+    //     VkDeviceMemory memory;
+    // };
 
-    struct BufferInfo {
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-    };
+    // struct BufferInfo {
+    //     VkBuffer buffer;
+    //     VkDeviceMemory memory;
+    // };
 
-    struct ShaderInfo {
-        std::vector<char> bytecode;
-        VkShaderModule module;
-    };
+    // struct ShaderInfo {
+    //     std::vector<char> bytecode;
+    //     VkShaderModule module;
+    // };
 
-    struct Light {
-        Light()
-            : enabled{false},
-              position{0.0, 0.0, 0.0},
-              color{1.0, 1.0, 1.0, 1.0},
-              specular_exp{0}
-        {}
+    // struct Light {
+    //     Light()
+    //         : enabled{false},
+    //           position{0.0, 0.0, 0.0},
+    //           color{1.0, 1.0, 1.0, 1.0},
+    //           specular_exp{0}
+    //     {}
 
-        bool enabled;
-        glm::vec3 position;
-        glm::vec4 color;
-        unsigned int specular_exp;
-    };
+    //     bool enabled;
+    //     glm::vec3 position;
+    //     glm::vec4 color;
+    //     unsigned int specular_exp;
+    // };
 
-    struct Uniforms {
-        Uniforms()
-            : model{1},
-              model_inv_trans_3{1},
-              view{1},
-              view_inv{1},
-              projection{1}
-        {}
+    // struct Uniforms {
+    //     Uniforms()
+    //         : model{1},
+    //           model_inv_trans_3{1},
+    //           view{1},
+    //           view_inv{1},
+    //           projection{1}
+    //     {}
 
-        glm::mat4x4 model;
-        glm::mat3x3 model_inv_trans_3;
-        glm::mat4x4 view;
-        glm::mat4x4 view_inv;
-        glm::mat4x4 projection;
-        Light lights[10];
-    };
+    //     glm::mat4x4 model;
+    //     glm::mat3x3 model_inv_trans_3;
+    //     glm::mat4x4 view;
+    //     glm::mat4x4 view_inv;
+    //     glm::mat4x4 projection;
+    //     Light lights[10];
+    // };
 
     // class Graphics {
     // public:
@@ -124,11 +124,13 @@ namespace vgraphplay {
             ~Device();
 
             bool initialize();
+            void dispose();
 
         protected:
             System *m_parent;
             VkDevice m_device;
             VkPhysicalDevice m_physical_device;
+            uint32_t m_queue_family;
         };
 
         class System {
@@ -137,6 +139,7 @@ namespace vgraphplay {
             ~System();
 
             bool initialize();
+            void dispose();
 
             inline VkInstance& instance() { return m_instance; }
 

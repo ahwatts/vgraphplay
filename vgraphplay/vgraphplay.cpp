@@ -13,7 +13,7 @@ void initGLFW(int width, int height, const char *title, GLFWwindow **window);
 void handleGLFWError(int code, const char *desc);
 void bailout(const std::string &msg);
 
-static gfx::System GFX;
+static std::unique_ptr<gfx::System> GFX{nullptr};
 const int WIDTH = 1024;
 const int HEIGHT = 768;
 
@@ -21,13 +21,14 @@ int main(int argc, char **argv) {
     GLFWwindow *window;
     initGLFW(WIDTH, HEIGHT, "VGraphplay", &window);
 
-    GFX.initialize(window);
+    GFX.reset(new gfx::System(window));
+    GFX->initialize();
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
     }
 
-    // GFX.shutDown();
+    delete GFX.release();
     glfwTerminate();
     return 0;
 }
@@ -54,7 +55,6 @@ void handleGLFWError(int code, const char *desc) {
 
 void bailout(const std::string &msg) {
     std::cerr << msg << std::endl;
-    // GFX.shutDown();
     glfwTerminate();
     std::exit(1);
 }

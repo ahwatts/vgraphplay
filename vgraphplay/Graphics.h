@@ -133,10 +133,12 @@ namespace vgraphplay {
 
         class System {
         public:
-            System();
+            System(GLFWwindow *window);
             ~System();
 
-            bool initialize(GLFWwindow *window);
+            bool initialize();
+
+            inline VkInstance& instance() { return m_instance; }
 
         protected:
             GLFWwindow *m_window;

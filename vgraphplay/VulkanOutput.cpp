@@ -44,6 +44,44 @@ namespace vgraphplay {
         }
     }
 
+    void logPhysicalDevices(VkInstance instance) {
+        uint32_t num_devices = 0;
+        vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
+        std::vector<VkPhysicalDevice> devices(num_devices);
+        vkEnumeratePhysicalDevices(instance, &num_devices, devices.data());
+
+        for (const auto& device : devices) {
+            std::ostringstream msg;
+
+            VkPhysicalDeviceProperties props;
+            vkGetPhysicalDeviceProperties(device, &props);
+
+            msg << "Physical device: (" << device << ") " << props;
+
+            uint32_t num_extensions;
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
+            std::vector<VkExtensionProperties> extensions(num_extensions);
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, extensions.data());
+
+            for (auto&& extension : extensions) {
+                msg << std::endl << "  Extension: " << extension;
+            }
+
+            VkPhysicalDeviceMemoryProperties mem_props;
+            vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
+
+            for (unsigned int i = 0; i < mem_props.memoryHeapCount; ++i) {
+                msg << std::endl << "  Memory heap " << i << ": " << mem_props.memoryHeaps[i];
+            }
+
+            for (unsigned int i = 0; i < mem_props.memoryTypeCount; ++i) {
+                msg << std::endl << "  Memory type " << i << ": " << mem_props.memoryTypes[i];
+            }
+
+            BOOST_LOG_TRIVIAL(trace) << msg.str();
+        }
+    }
+
     std::ostream& operator<<(std::ostream &stream, const VkExtensionProperties &props) {
         stream << "[ Name: " << props.extensionName
                << ", Spec version: "
@@ -68,115 +106,53 @@ namespace vgraphplay {
         return stream;
     }
 
-    // std::ostream& operator<<(std::ostream &stream, const VkLayerProperties &props) {
-    // }
+    std::ostream& operator<<(std::ostream &stream, const VkPhysicalDeviceProperties &props) {
+        stream << "[ Name: " << props.deviceName
+               << ", API version: "
+               << VK_VERSION_MAJOR(props.apiVersion) << "."
+               << VK_VERSION_MINOR(props.apiVersion) << "."
+               << VK_VERSION_PATCH(props.apiVersion)
+               << ", Driver version: "
+               << VK_VERSION_MAJOR(props.driverVersion) << "."
+               << VK_VERSION_MINOR(props.driverVersion) << "."
+               << VK_VERSION_PATCH(props.driverVersion);
 
-    // std::ostream& operator<<(std::ostream &stream, const VkPhysicalDeviceProperties &props) {
-    //     stream << "[ Name: " << props.deviceName
-    //            << ", API version: "
-    //            << VK_VERSION_MAJOR(props.apiVersion) << "."
-    //            << VK_VERSION_MINOR(props.apiVersion) << "."
-    //            << VK_VERSION_PATCH(props.apiVersion)
-    //            << ", Driver version: "
-    //            << VK_VERSION_MAJOR(props.driverVersion) << "."
-    //            << VK_VERSION_MINOR(props.driverVersion) << "."
-    //            << VK_VERSION_PATCH(props.driverVersion)
-    //            << ", Device type: " << props.deviceType
-    //            << ", Vendor ID: " << props.vendorID
-    //            << ", Device ID: " << props.deviceID << " ]";
-    //     return stream;
-    // }
+        stream << ", Device type: ";
+        outputPhysicalDeviceType(stream, props.deviceType);
 
-    // std::ostream& operator<<(std::ostream &stream, const VkPhysicalDeviceType &device_type) {
-    //     switch (device_type) {
-    //     case VK_PHYSICAL_DEVICE_TYPE_OTHER:
-    //         return stream << "Other";
-    //     case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-    //         return stream << "Integrated GPU";
-    //     case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-    //         return stream << "Discrete GPU";
-    //     case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-    //         return stream << "Virtual GPU";
-    //     case VK_PHYSICAL_DEVICE_TYPE_CPU:
-    //         return stream << "CPU";
-    //     default:
-    //         return stream << "Unknown: " << device_type;
-    //     }
-    // }
+        stream << ", Vendor ID: " << props.vendorID
+               << ", Device ID: " << props.deviceID << " ]";
+        return stream;
+    }
 
-    // std::ostream& operator<<(std::ostream &stream, const VkQueueFamilyProperties &props) {
-    //     stream << "[ Flags:";
+    std::ostream& operator<<(std::ostream &stream, const VkQueueFamilyProperties &props) {
+        stream << "[ Flags:";
+        outputQueueFlags(stream, props.queueFlags);
 
-    //     if (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-    //         stream << " Graphics";
-    //     }
+        stream << ", Queue count: " << props.queueCount
+               << ", Valid timestamp bits: " << props.timestampValidBits
+               << " ]";
 
-    //     if (props.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-    //         stream << " Compute";
-    //     }
+        return stream;
+    }
 
-    //     if (props.queueFlags & VK_QUEUE_TRANSFER_BIT) {
-    //         stream << " Transfer";
-    //     }
+    std::ostream& operator<<(std::ostream &stream, const VkMemoryType &mem_type) {
+        stream << "[ Heap index: " << mem_type.heapIndex;
 
-    //     if (props.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
-    //         stream << " Sparse-Binding";
-    //     }
+        stream << ", Property flags: ";
+        outputMemoryPropertyFlags(stream, mem_type.propertyFlags);
 
-    //     stream << ", Queue count: " << props.queueCount
-    //            << ", Valid timestamp bits: " << props.timestampValidBits
-    //            << " ]";
+        return stream << " ]";
+    }
 
-    //     return stream;
-    // }
+    std::ostream& operator<<(std::ostream &stream, const VkMemoryHeap &mem_heap) {
+        stream << "[ Size: " << (mem_heap.size / 1048576) << " MiB";
+        
+        stream << ", Flags: ";
+        outputMemoryHeapFlags(stream, mem_heap.flags);
 
-    // std::ostream& operator<<(std::ostream &stream, const VkMemoryType &mem_type) {
-    //     stream << "[ Heap index: " << mem_type.heapIndex << ", Flags: " << mem_type.propertyFlags << " (";
-
-    //     if (mem_type.propertyFlags == 0) {
-    //         stream << " None";
-    //     } else {
-    //         if (mem_type.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-    //             stream << " Device-Local";
-    //         }
-
-    //         if (mem_type.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-    //             stream << " Host-Visible";
-    //         }
-
-    //         if (mem_type.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
-    //             stream << " Host-Coherent";
-    //         }
-
-    //         if (mem_type.propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) {
-    //             stream << " Host-Cached";
-    //         }
-
-    //         if (mem_type.propertyFlags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
-    //             stream << " Lazily-Allocated";
-    //         }
-    //     }
-
-    //     stream << " ) ]";
-
-    //     return stream;
-    // }
-
-    // std::ostream& operator<<(std::ostream &stream, const VkMemoryHeap &mem_heap) {
-    //     stream << "[ Size: " << (mem_heap.size / 1048576) << " MiB, Flags: " << mem_heap.flags << " (";
-
-    //     if (mem_heap.flags == 0) {
-    //         stream << " None";
-    //     } else {
-    //         if (mem_heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
-    //             stream << " Device-Local";
-    //         }
-    //     }
-
-    //     stream << " ) ]";
-
-    //     return stream;
-    // }
+        return stream << " ]";
+    }
 
     // std::ostream& operator<<(std::ostream &stream, const VkSurfaceCapabilitiesKHR &surf_caps) {
     //     stream << "[ Min image count: " << surf_caps.minImageCount
@@ -215,6 +191,93 @@ namespace vgraphplay {
     //         return stream << mode;
     //     }
     // }
+
+    std::ostream& outputPhysicalDeviceType(std::ostream &stream, const VkPhysicalDeviceType &device_type) {
+        switch (device_type) {
+        case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+            return stream << "Other";
+        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+            return stream << "Integrated GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+            return stream << "Discrete GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+            return stream << "Virtual GPU";
+        case VK_PHYSICAL_DEVICE_TYPE_CPU:
+            return stream << "CPU";
+        default:
+            return stream << "Unknown: " << device_type;
+        }
+    }
+
+    std::ostream& outputQueueFlags(std::ostream &stream, const VkQueueFlags &flags) {
+        stream << "(" << flags << ") [";
+
+        if (flags == 0) {
+            stream << " None";
+        } else {
+            if (flags & VK_QUEUE_GRAPHICS_BIT) {
+                stream << " Graphics,";
+            }
+
+            if (flags & VK_QUEUE_COMPUTE_BIT) {
+                stream << " Compute,";
+            }
+
+            if (flags & VK_QUEUE_TRANSFER_BIT) {
+                stream << " Transfer,";
+            }
+
+            if (flags & VK_QUEUE_SPARSE_BINDING_BIT) {
+                stream << " Sparse Binding,";
+            }
+        }
+
+        return stream << " ]";
+    }
+
+    std::ostream& outputMemoryPropertyFlags(std::ostream &stream, const VkMemoryPropertyFlags &flags) {
+        stream << "(" << flags << ") [";
+
+        if (flags == 0) {
+            stream << " None";
+        } else {
+            if (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+                stream << " Device Local,";
+            }
+
+            if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+                stream << " Host Visible,";
+            }
+
+            if (flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
+                stream << " Host Coherent,";
+            }
+
+            if (flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) {
+                stream << " Host Cached,";
+            }
+
+            if (flags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
+                stream << " Lazily,Allocated,";
+            }
+        }
+
+        return stream << " ]";
+    }
+
+    std::ostream& outputMemoryHeapFlags(std::ostream &stream, const VkMemoryHeapFlags &flags) {
+        stream << "(" << flags << ") [";
+
+        if (flags == 0) {
+            stream << " None";
+        } else {
+            if (flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+                stream << " Device Local,";
+            }
+        }
+
+        return stream << " ]";
+    }
 
     // std::ostream& outputSurfaceTransformFlags(std::ostream &stream, const VkSurfaceTransformFlagsKHR &flags) {
     //     stream << "[";

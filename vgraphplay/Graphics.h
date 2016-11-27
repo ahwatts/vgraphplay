@@ -114,9 +114,9 @@ namespace vgraphplay {
     // };
 
     namespace gfx {
-        class System;
         class Device;
-        class Surface;
+        class Presentation;
+        class System;
 
         class Device {
         public:
@@ -131,6 +131,20 @@ namespace vgraphplay {
             VkDevice m_device;
             VkPhysicalDevice m_physical_device;
             uint32_t m_queue_family;
+            VkQueue m_queue;
+        };
+
+        class Presentation {
+        public:
+            Presentation(System *parent);
+            ~Presentation();
+
+            bool initialize();
+            void dispose();
+
+        protected:
+            System *m_parent;
+            VkSurfaceKHR m_surface;
         };
 
         class System {
@@ -141,12 +155,14 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
+            inline GLFWwindow* window() { return m_window; }
             inline VkInstance& instance() { return m_instance; }
 
         protected:
             GLFWwindow *m_window;
             VkInstance m_instance;
             Device m_device;
+            Presentation m_present;
         };
     }
 }

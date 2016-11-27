@@ -11,66 +11,13 @@
 
 namespace vgraphplay {
     namespace gfx {
-        System::System(GLFWwindow *window)
-            : m_window{window},
-              m_instance{VK_NULL_HANDLE},
-              m_device{this}
-        {}
-
-        System::~System() {
-            dispose();
-        }
-
-        bool System::initialize() {
-            if (m_instance != VK_NULL_HANDLE) {
-                return true;
-            }
-
-            logGlobalExtensions();
-            logGlobalLayers();
-
-            std::vector<const char*> extension_names;
-            uint32_t glfw_extension_count;
-            const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-            for (unsigned int i = 0; i < glfw_extension_count; ++i) {
-                BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
-                extension_names.emplace_back(glfw_extensions[i]);
-            }
-
-            VkInstanceCreateInfo inst_ci;
-            inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-            inst_ci.pNext = nullptr;
-            inst_ci.pApplicationInfo = nullptr;
-            inst_ci.enabledLayerCount = 0;
-            inst_ci.ppEnabledLayerNames = nullptr;
-            inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
-            inst_ci.ppEnabledExtensionNames = extension_names.data();
-
-            VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
-            if (rslt == VK_SUCCESS) {
-                BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
-                return m_device.initialize();
-            } else {
-                BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
-                return false;
-            }
-        }
-
-        void System::dispose() {
-            m_device.dispose();
-
-            if (m_instance != VK_NULL_HANDLE) {
-                BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
-                vkDestroyInstance(m_instance, nullptr);
-                m_instance = VK_NULL_HANDLE;
-            }
-        }
 
         Device::Device(System *parent)
             : m_parent{parent},
               m_device{VK_NULL_HANDLE},
               m_physical_device{VK_NULL_HANDLE},
-              m_queue_family{UINT32_MAX}
+              m_queue_family{UINT32_MAX},
+              m_queue{VK_NULL_HANDLE}
         {}
 
         Device::~Device() {
@@ -136,11 +83,14 @@ namespace vgraphplay {
 
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Device created: " << m_device;
-                return true;
             } else {
                 BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
                 return false;
             }
+
+            vkGetDeviceQueue(m_device, m_queue_family, 0, &m_queue);
+            BOOST_LOG_TRIVIAL(trace) << "Device queue: " << m_queue;
+            return true;
         }
 
         void Device::dispose() {
@@ -150,10 +100,96 @@ namespace vgraphplay {
                 m_device = VK_NULL_HANDLE;
             }
 
-            // No need to actually destroy this; it's maintained by
-            // Vulkan.
+            // No need to actually destroy the rest of these; they're
+            // managed by Vulkan.
             m_physical_device = VK_NULL_HANDLE;
+            m_queue = VK_NULL_HANDLE;
             m_queue_family = UINT32_MAX;
+        }
+
+        Presentation::Presentation(System *parent)
+            : m_parent{parent},
+              m_surface{VK_NULL_HANDLE}
+        {}
+
+        Presentation::~Presentation() {
+            dispose();
+        }
+
+        bool Presentation::initialize() {
+            VkResult rslt = glfwCreateWindowSurface(m_parent->instance(), m_parent->window(), nullptr, &m_surface);
+            if (rslt == VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
+                return true;
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Error creating surface: " << rslt;
+                return false;
+            }
+        }
+
+        void Presentation::dispose() {
+            if (m_surface != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
+                vkDestroySurfaceKHR(m_parent->instance(), m_surface, nullptr);
+                m_surface = VK_NULL_HANDLE;
+            }
+        }
+
+        System::System(GLFWwindow *window)
+            : m_window{window},
+              m_instance{VK_NULL_HANDLE},
+              m_device{this},
+              m_present{this}
+        {}
+
+        System::~System() {
+            dispose();
+        }
+
+        bool System::initialize() {
+            if (m_instance != VK_NULL_HANDLE) {
+                return true;
+            }
+
+            logGlobalExtensions();
+            logGlobalLayers();
+
+            std::vector<const char*> extension_names;
+            uint32_t glfw_extension_count;
+            const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+            for (unsigned int i = 0; i < glfw_extension_count; ++i) {
+                BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
+                extension_names.emplace_back(glfw_extensions[i]);
+            }
+
+            VkInstanceCreateInfo inst_ci;
+            inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+            inst_ci.pNext = nullptr;
+            inst_ci.pApplicationInfo = nullptr;
+            inst_ci.enabledLayerCount = 0;
+            inst_ci.ppEnabledLayerNames = nullptr;
+            inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
+            inst_ci.ppEnabledExtensionNames = extension_names.data();
+
+            VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
+            if (rslt == VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
+                return m_device.initialize() && m_present.initialize();
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
+                return false;
+            }
+        }
+
+        void System::dispose() {
+            m_device.dispose();
+            m_present.dispose();
+
+            if (m_instance != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
+                vkDestroyInstance(m_instance, nullptr);
+                m_instance = VK_NULL_HANDLE;
+            }
         }
     }
 

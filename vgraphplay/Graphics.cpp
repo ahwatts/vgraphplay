@@ -49,7 +49,8 @@ namespace vgraphplay {
             : m_parent{parent},
               m_device{VK_NULL_HANDLE},
               m_physical_device{VK_NULL_HANDLE},
-              m_queues{this}
+              m_queues{this},
+              m_present{this}
         {}
 
         Device::~Device() {
@@ -113,14 +114,17 @@ namespace vgraphplay {
 
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Device created: " << m_device;
-                return m_queues.initialize(graphics_queue_family, present_queue_family);
             } else {
                 BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
                 return false;
             }
+
+            return m_queues.initialize(graphics_queue_family, present_queue_family) &&
+                m_present.initialize();
         }
 
         void Device::dispose() {
+            m_present.dispose();
             m_queues.dispose();
 
             if (m_device != VK_NULL_HANDLE) {
@@ -194,7 +198,11 @@ namespace vgraphplay {
             return m_parent->surface();
         }
 
-        Presentation::Presentation(System *parent)
+        CommandQueues& Device::queues() {
+            return m_queues;
+        }
+
+        Presentation::Presentation(Device *parent)
             : m_parent{parent}
         {}
 
@@ -203,16 +211,113 @@ namespace vgraphplay {
         }
 
         bool Presentation::initialize() {
-            logSurfaceCapabilities(physicalDevice(), surface());
+            if (m_swapchain == VK_NULL_HANDLE) {
+                VkPhysicalDevice pdev = physicalDevice();
+                VkDevice dev = device();
+                VkSurfaceKHR surf = surface();
+                CommandQueues &qs = queues();
+
+                logSurfaceCapabilities(pdev, surf);
+
+                VkSurfaceCapabilitiesKHR surf_caps;
+                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pdev, surf, &surf_caps);
+
+                uint32_t num_formats;
+                vkGetPhysicalDeviceSurfaceFormatsKHR(pdev, surf, &num_formats, nullptr);
+                std::vector<VkSurfaceFormatKHR> formats(num_formats);
+                vkGetPhysicalDeviceSurfaceFormatsKHR(pdev, surf, &num_formats, formats.data());
+
+                uint32_t num_modes;
+                vkGetPhysicalDeviceSurfacePresentModesKHR(pdev, surf, &num_modes, nullptr);
+                std::vector<VkPresentModeKHR> modes(num_modes);
+                vkGetPhysicalDeviceSurfacePresentModesKHR(pdev, surf, &num_modes, modes.data());
+
+                std::vector<uint32_t> queue_families;
+                queue_families.emplace_back(qs.graphicsQueueFamily());
+                if (qs.graphicsQueueFamily() != qs.presentQueueFamily()) {
+                    queue_families.emplace_back(qs.presentQueueFamily());
+                }
+
+                VkSwapchainCreateInfoKHR swapchain_ci;
+                swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+                swapchain_ci.pNext = nullptr;
+                swapchain_ci.flags = 0;
+                swapchain_ci.surface = surf;
+                swapchain_ci.minImageCount = surf_caps.minImageCount;
+                swapchain_ci.imageFormat = formats[0].format;
+                swapchain_ci.imageColorSpace = formats[0].colorSpace;
+                swapchain_ci.imageExtent = surf_caps.currentExtent;
+                swapchain_ci.imageArrayLayers = 1;
+                swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+                swapchain_ci.queueFamilyIndexCount = queue_families.size();
+                swapchain_ci.pQueueFamilyIndices = queue_families.data();
+                swapchain_ci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+                swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+                swapchain_ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+                swapchain_ci.clipped = VK_TRUE;
+                swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
+
+                VkResult rslt = vkCreateSwapchainKHR(dev, &swapchain_ci, nullptr, &m_swapchain);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << m_swapchain << std::endl;
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error: " << rslt << " swapchain = " << m_swapchain << std::endl;
+                    return false;
+                }
+            }
+
+            // uint32_t num_swapchain_images = 0;
+            // vkGetSwapchainImagesKHR(device, swapchain.swapchain, &num_swapchain_images, nullptr);
+
+            // swapchain.images.resize(num_swapchain_images);
+
+            // std::vector<VkImage> swapchain_images(num_swapchain_images);
+            // vkGetSwapchainImagesKHR(device, swapchain.swapchain, &num_swapchain_images, swapchain_images.data());
+
+            // for (unsigned int i = 0; i < swapchain_images.size(); ++i) {
+            //     std::cout << "Swapchain image: " << swapchain_images[i] << std::endl;
+            //     swapchain.images[i].image = swapchain_images[i];
+
+            //     VkImageViewCreateInfo img_view_ci;
+            //     img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            //     img_view_ci.pNext = nullptr;
+            //     img_view_ci.flags = 0;
+            //     img_view_ci.image = swapchain.images[i].image;
+            //     img_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            //     img_view_ci.format = formats[0].format;
+            //     img_view_ci.components.r = VK_COMPONENT_SWIZZLE_R;
+            //     img_view_ci.components.g = VK_COMPONENT_SWIZZLE_G;
+            //     img_view_ci.components.b = VK_COMPONENT_SWIZZLE_B;
+            //     img_view_ci.components.a = VK_COMPONENT_SWIZZLE_A;
+            //     img_view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            //     img_view_ci.subresourceRange.baseMipLevel = 0;
+            //     img_view_ci.subresourceRange.levelCount = 1;
+            //     img_view_ci.subresourceRange.baseArrayLayer = 0;
+            //     img_view_ci.subresourceRange.layerCount = 1;
+
+            //     vkCreateImageView(device, &img_view_ci, nullptr, &swapchain.images[i].view);
+
+            //     if (rslt == VK_SUCCESS) {
+            //         std::cout << "Created image view for swapchain " << swapchain.swapchain << " image " << i
+            //                   << ": " << swapchain.images[i].view << std::endl;
+            //     } else {
+            //         std::cerr << "Could not create image view for swapchain " << swapchain.swapchain << " image " << i
+            //                   << ": " << rslt << " view = " << swapchain.images[i].view << std::endl;
+            //         return false;
+            //     }
+            // }
+
             return true;
         }
 
         void Presentation::dispose() {
-            // Nothing here, at the moment.
-        }
-
-        VkInstance& Presentation::instance() {
-            return m_parent->instance();
+            VkDevice &dev = device();
+            if (dev != VK_NULL_HANDLE && m_swapchain != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain: " << m_swapchain;
+                vkDestroySwapchainKHR(dev, m_swapchain, nullptr);
+                m_swapchain = VK_NULL_HANDLE;
+            }
         }
 
         VkPhysicalDevice& Presentation::physicalDevice() {
@@ -227,15 +332,14 @@ namespace vgraphplay {
             return m_parent->surface();
         }
 
-        GLFWwindow* Presentation::window() {
-            return m_parent->window();
+        CommandQueues& Presentation::queues() {
+            return m_parent->queues();
         }
 
         System::System(GLFWwindow *window)
             : m_window{window},
               m_instance{VK_NULL_HANDLE},
-              m_device{this},
-              m_present{this}
+              m_device{this}
         {}
 
         System::~System() {
@@ -283,12 +387,11 @@ namespace vgraphplay {
                 }
             }
 
-            return m_device.initialize() && m_present.initialize();
+            return m_device.initialize();
         }
 
         void System::dispose() {
             m_device.dispose();
-            m_present.dispose();
 
             if (m_instance != VK_NULL_HANDLE && m_surface != VK_NULL_HANDLE) {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
@@ -339,76 +442,6 @@ namespace vgraphplay {
     // }
 
     // bool Graphics::initSwapchain() {
-    //     VkSwapchainCreateInfoKHR create_info;
-    //     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    //     create_info.pNext = nullptr;
-    //     create_info.flags = 0;
-    //     create_info.surface = surface;
-    //     create_info.minImageCount = surf_caps.minImageCount;
-    //     create_info.imageFormat = formats[0].format;
-    //     create_info.imageColorSpace = formats[0].colorSpace;
-    //     create_info.imageExtent = surf_caps.currentExtent;
-    //     create_info.imageArrayLayers = 1;
-    //     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    //     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    //     create_info.queueFamilyIndexCount = 1;
-    //     create_info.pQueueFamilyIndices = &queue.family;
-    //     create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    //     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    //     create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    //     create_info.clipped = VK_TRUE;
-    //     create_info.oldSwapchain = VK_NULL_HANDLE;
-
-    //     VkResult rslt = vkCreateSwapchainKHR(device, &create_info, nullptr, &swapchain.swapchain);
-    //     if (rslt == VK_SUCCESS) {
-    //         std::cout << "Created swapchain: " << swapchain.swapchain << std::endl;
-    //     } else {
-    //         std::cerr << "Error: " << rslt << " swapchain = " << swapchain.swapchain << std::endl;
-    //         return false;
-    //     }
-
-    //     uint32_t num_swapchain_images = 0;
-    //     vkGetSwapchainImagesKHR(device, swapchain.swapchain, &num_swapchain_images, nullptr);
-
-    //     swapchain.images.resize(num_swapchain_images);
-
-    //     std::vector<VkImage> swapchain_images(num_swapchain_images);
-    //     vkGetSwapchainImagesKHR(device, swapchain.swapchain, &num_swapchain_images, swapchain_images.data());
-
-    //     for (unsigned int i = 0; i < swapchain_images.size(); ++i) {
-    //         std::cout << "Swapchain image: " << swapchain_images[i] << std::endl;
-    //         swapchain.images[i].image = swapchain_images[i];
-
-    //         VkImageViewCreateInfo create_info;
-    //         create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    //         create_info.pNext = nullptr;
-    //         create_info.flags = 0;
-    //         create_info.image = swapchain.images[i].image;
-    //         create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    //         create_info.format = formats[0].format;
-    //         create_info.components.r = VK_COMPONENT_SWIZZLE_R;
-    //         create_info.components.g = VK_COMPONENT_SWIZZLE_G;
-    //         create_info.components.b = VK_COMPONENT_SWIZZLE_B;
-    //         create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-    //         create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    //         create_info.subresourceRange.baseMipLevel = 0;
-    //         create_info.subresourceRange.levelCount = 1;
-    //         create_info.subresourceRange.baseArrayLayer = 0;
-    //         create_info.subresourceRange.layerCount = 1;
-
-    //         vkCreateImageView(device, &create_info, nullptr, &swapchain.images[i].view);
-
-    //         if (rslt == VK_SUCCESS) {
-    //             std::cout << "Created image view for swapchain " << swapchain.swapchain << " image " << i
-    //                       << ": " << swapchain.images[i].view << std::endl;
-    //         } else {
-    //             std::cerr << "Could not create image view for swapchain " << swapchain.swapchain << " image " << i
-    //                       << ": " << rslt << " view = " << swapchain.images[i].view << std::endl;
-    //             return false;
-    //         }
-    //     }
-
-    //     return true;
     // }
 
     // bool Graphics::initDepthBuffer() {

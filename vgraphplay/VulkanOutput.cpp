@@ -94,6 +94,35 @@ namespace vgraphplay {
         }
     }
 
+    void logSurfaceCapabilities(VkPhysicalDevice device, VkSurfaceKHR surface) {
+        std::ostringstream msg;
+        msg << "Physical device " << device << ", surface " << surface;
+
+        VkSurfaceCapabilitiesKHR surf_caps;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &surf_caps);
+        msg << std::endl << "  Capabilities: " << surf_caps;
+
+        uint32_t num_formats;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &num_formats, nullptr);
+        std::vector<VkSurfaceFormatKHR> formats(num_formats);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &num_formats, formats.data());
+
+        for (auto&& format : formats) {
+            msg << std::endl << "  Surface format: [ format: " << format.format << " color space: " << format.colorSpace << " ]";
+        }
+
+        uint32_t num_modes;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &num_modes, nullptr);
+        std::vector<VkPresentModeKHR> modes(num_modes);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &num_modes, modes.data());
+
+        for (auto&& mode : modes) {
+            msg << std::endl << "  Surface present mode: " << mode;
+        }
+
+        BOOST_LOG_TRIVIAL(trace) << msg.str();
+    }
+
     std::ostream& operator<<(std::ostream &stream, const VkExtensionProperties &props) {
         stream << "[ Name: " << props.extensionName
                << ", Spec version: "
@@ -166,43 +195,43 @@ namespace vgraphplay {
         return stream << " ]";
     }
 
-    // std::ostream& operator<<(std::ostream &stream, const VkSurfaceCapabilitiesKHR &surf_caps) {
-    //     stream << "[ Min image count: " << surf_caps.minImageCount
-    //            << ", Max image count: " << surf_caps.maxImageCount
-    //            << ", Current extent: " << surf_caps.currentExtent.width << "x" << surf_caps.currentExtent.height
-    //            << ", Min image extent: " << surf_caps.minImageExtent.width << "x" << surf_caps.minImageExtent.height
-    //            << ", Max image extent: " << surf_caps.maxImageExtent.width << "x" << surf_caps.maxImageExtent.height
-    //            << ", Max image array layers: " << surf_caps.maxImageArrayLayers;
+    std::ostream& operator<<(std::ostream &stream, const VkSurfaceCapabilitiesKHR &surf_caps) {
+        stream << "[ Min image count: " << surf_caps.minImageCount
+               << ", Max image count: " << surf_caps.maxImageCount
+               << ", Current extent: " << surf_caps.currentExtent.width << "x" << surf_caps.currentExtent.height
+               << ", Min image extent: " << surf_caps.minImageExtent.width << "x" << surf_caps.minImageExtent.height
+               << ", Max image extent: " << surf_caps.maxImageExtent.width << "x" << surf_caps.maxImageExtent.height
+               << ", Max image array layers: " << surf_caps.maxImageArrayLayers;
 
-    //     stream << ", Supported transforms: ";
-    //     outputSurfaceTransformFlags(stream, surf_caps.supportedTransforms);
+        stream << ", Supported transforms: ";
+        outputSurfaceTransformFlags(stream, surf_caps.supportedTransforms);
 
-    //     stream << ", Current transform: ";
-    //     outputSurfaceTransformFlags(stream, static_cast<VkSurfaceTransformFlagsKHR>(surf_caps.currentTransform));
+        stream << ", Current transform: ";
+        outputSurfaceTransformFlags(stream, static_cast<VkSurfaceTransformFlagsKHR>(surf_caps.currentTransform));
 
-    //     stream << ", Supported alpha compositing: ";
-    //     outputCompositeAlphaFlags(stream, surf_caps.supportedCompositeAlpha);
+        stream << ", Supported alpha compositing: ";
+        outputCompositeAlphaFlags(stream, surf_caps.supportedCompositeAlpha);
 
-    //     stream << ", Supported image usages: ";
-    //     outputImageUsageFlags(stream, surf_caps.supportedUsageFlags);
+        stream << ", Supported image usages: ";
+        outputImageUsageFlags(stream, surf_caps.supportedUsageFlags);
 
-    //     return stream << " ]";
-    // }
+        return stream << " ]";
+    }
 
-    // std::ostream& operator<<(std::ostream &stream, const VkPresentModeKHR &mode) {
-    //     switch (mode) {
-    //     case VK_PRESENT_MODE_IMMEDIATE_KHR:
-    //         return stream << "Immediate";
-    //     case VK_PRESENT_MODE_MAILBOX_KHR:
-    //         return stream << "Mailbox";
-    //     case VK_PRESENT_MODE_FIFO_KHR:
-    //         return stream << "FIFO";
-    //     case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
-    //         return stream << "Relaxed FIFO";
-    //     default:
-    //         return stream << mode;
-    //     }
-    // }
+    std::ostream& operator<<(std::ostream &stream, const VkPresentModeKHR &mode) {
+        switch (mode) {
+        case VK_PRESENT_MODE_IMMEDIATE_KHR:
+            return stream << "Immediate";
+        case VK_PRESENT_MODE_MAILBOX_KHR:
+            return stream << "Mailbox";
+        case VK_PRESENT_MODE_FIFO_KHR:
+            return stream << "FIFO";
+        case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+            return stream << "Relaxed FIFO";
+        default:
+            return stream << mode;
+        }
+    }
 
     std::ostream& outputPhysicalDeviceType(std::ostream &stream, const VkPhysicalDeviceType &device_type) {
         switch (device_type) {
@@ -291,105 +320,117 @@ namespace vgraphplay {
         return stream << " ]";
     }
 
-    // std::ostream& outputSurfaceTransformFlags(std::ostream &stream, const VkSurfaceTransformFlagsKHR &flags) {
-    //     stream << "[";
-    
-    //     if (flags & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
-    //         stream << " Identity,";
-    //     }
+    std::ostream& outputSurfaceTransformFlags(std::ostream &stream, const VkSurfaceTransformFlagsKHR &flags) {
+        stream << "(" << flags << ") [";
 
-    //     if (flags & VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
-    //         stream << " Rotate 90 degrees,";
-    //     }
+        if (flags == 0) {
+            stream << " None";
+        } else {
+            if (flags & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+                stream << " Identity,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR) {
-    //         stream << " Rotate 180 degrees,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR) {
+                stream << " Rotate 90 degrees,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
-    //         stream << " Rotate 270 degrees,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR) {
+                stream << " Rotate 180 degrees,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_BIT_KHR) {
-    //         stream << "Horizontal mirror,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR) {
+                stream << " Rotate 270 degrees,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR) {
-    //         stream << " Rotate horizontal mirror 90 degrees,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_BIT_KHR) {
+                stream << "Horizontal mirror,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR) {
-    //         stream << " Rotate horizontal mirror 90 degrees,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR) {
+                stream << " Rotate horizontal mirror 90 degrees,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR) {
-    //         stream << " Rotate horizontal mirror 90 degrees,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR) {
+                stream << " Rotate horizontal mirror 90 degrees,";
+            }
 
-    //     if (flags & VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR) {
-    //         stream << " Inherit,";
-    //     }
+            if (flags & VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR) {
+                stream << " Rotate horizontal mirror 90 degrees,";
+            }
 
-    //     return stream << " ]";
-    // }
+            if (flags & VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR) {
+                stream << " Inherit,";
+            }
+        }
 
-    // std::ostream& outputCompositeAlphaFlags(std::ostream &stream, const VkCompositeAlphaFlagsKHR &flags) {
-    //     stream << "[";
+        return stream << " ]";
+    }
 
-    //     if (flags & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
-    //         stream << " Opaque,";
-    //     }
+    std::ostream& outputCompositeAlphaFlags(std::ostream &stream, const VkCompositeAlphaFlagsKHR &flags) {
+        stream << "(" << flags << ") [";
 
-    //     if (flags & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) {
-    //         stream << " Pre-multiplied,";
-    //     }
+        if (flags == 0) {
+            stream << " None";
+        } else {
+            if (flags & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
+                stream << " Opaque,";
+            }
 
-    //     if (flags & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) {
-    //         stream << " Post-multiplied,";
-    //     }
+            if (flags & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) {
+                stream << " Pre-multiplied,";
+            }
 
-    //     if (flags & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) {
-    //         stream << " Inherit,";
-    //     }
+            if (flags & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) {
+                stream << " Post-multiplied,";
+            }
 
-    //     return stream << " ]";
-    // }
+            if (flags & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) {
+                stream << " Inherit,";
+            }
+        }
 
-    // std::ostream& outputImageUsageFlags(std::ostream &stream, const VkImageUsageFlags &flags) {
-    //     stream << "[";
+        return stream << " ]";
+    }
 
-    //     if (flags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
-    //         stream << " Transfer source,";
-    //     }
+    std::ostream& outputImageUsageFlags(std::ostream &stream, const VkImageUsageFlags &flags) {
+        stream << "(" << flags << ") [";
 
-    //     if (flags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
-    //         stream << " Transfer destination,";
-    //     }
+        if (flags == 0) {
+            stream << " None";
+        } else {
+            if (flags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+                stream << " Transfer source,";
+            }
 
-    //     if (flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
-    //         stream << " Sampled,";
-    //     }
+            if (flags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
+                stream << " Transfer destination,";
+            }
 
-    //     if (flags & VK_IMAGE_USAGE_STORAGE_BIT) {
-    //         stream << " Storage,";
-    //     }
+            if (flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+                stream << " Sampled,";
+            }
 
-    //     if (flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
-    //         stream << " Color attachment,";
-    //     }
+            if (flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+                stream << " Storage,";
+            }
 
-    //     if (flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-    //         stream << " Depth / Stencil attachment,";
-    //     }
+            if (flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+                stream << " Color attachment,";
+            }
 
-    //     if (flags & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT) {
-    //         stream << " Transient attachment,";
-    //     }
+            if (flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+                stream << " Depth / Stencil attachment,";
+            }
 
-    //     if (flags & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
-    //         stream << " Input attachment,";
-    //     }
+            if (flags & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT) {
+                stream << " Transient attachment,";
+            }
 
-    //     return stream << " ]";
-    // }
+            if (flags & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
+                stream << " Input attachment,";
+            }
+        }
+
+        return stream << " ]";
+    }
 }

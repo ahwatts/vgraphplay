@@ -182,6 +182,10 @@ namespace vgraphplay {
             return m_parent->instance();
         }
 
+        VkPhysicalDevice& Device::physicalDevice() {
+            return m_physical_device;
+        }
+
         VkDevice& Device::device() {
             return m_device;
         }
@@ -191,8 +195,7 @@ namespace vgraphplay {
         }
 
         Presentation::Presentation(System *parent)
-            : m_parent{parent},
-              m_surface{VK_NULL_HANDLE}
+            : m_parent{parent}
         {}
 
         Presentation::~Presentation() {
@@ -200,30 +203,20 @@ namespace vgraphplay {
         }
 
         bool Presentation::initialize() {
-            if (m_surface != VK_NULL_HANDLE) {
-                return true;
-            }
-
-            VkResult rslt = glfwCreateWindowSurface(instance(), window(), nullptr, &m_surface);
-            if (rslt == VK_SUCCESS) {
-                BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
-                return true;
-            } else {
-                BOOST_LOG_TRIVIAL(error) << "Error creating surface: " << rslt;
-                return false;
-            }
+            logSurfaceCapabilities(physicalDevice(), surface());
+            return true;
         }
 
         void Presentation::dispose() {
-            if (m_surface != VK_NULL_HANDLE) {
-                BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
-                vkDestroySurfaceKHR(m_parent->instance(), m_surface, nullptr);
-                m_surface = VK_NULL_HANDLE;
-            }
+            // Nothing here, at the moment.
         }
 
         VkInstance& Presentation::instance() {
             return m_parent->instance();
+        }
+
+        VkPhysicalDevice& Presentation::physicalDevice() {
+            return m_parent->physicalDevice();
         }
 
         VkDevice& Presentation::device() {
@@ -231,7 +224,7 @@ namespace vgraphplay {
         }
 
         VkSurfaceKHR& Presentation::surface() {
-            return m_surface;
+            return m_parent->surface();
         }
 
         GLFWwindow* Presentation::window() {
@@ -250,43 +243,58 @@ namespace vgraphplay {
         }
 
         bool System::initialize() {
-            if (m_instance != VK_NULL_HANDLE) {
-                return true;
+            if (m_instance == VK_NULL_HANDLE) {
+                logGlobalExtensions();
+                logGlobalLayers();
+
+                std::vector<const char*> extension_names;
+                uint32_t glfw_extension_count;
+                const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+                for (unsigned int i = 0; i < glfw_extension_count; ++i) {
+                    BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
+                    extension_names.emplace_back(glfw_extensions[i]);
+                }
+
+                VkInstanceCreateInfo inst_ci;
+                inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+                inst_ci.pNext = nullptr;
+                inst_ci.pApplicationInfo = nullptr;
+                inst_ci.enabledLayerCount = 0;
+                inst_ci.ppEnabledLayerNames = nullptr;
+                inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
+                inst_ci.ppEnabledExtensionNames = extension_names.data();
+
+                VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
+                    return false;
+                }
             }
 
-            logGlobalExtensions();
-            logGlobalLayers();
-
-            std::vector<const char*> extension_names;
-            uint32_t glfw_extension_count;
-            const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-            for (unsigned int i = 0; i < glfw_extension_count; ++i) {
-                BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
-                extension_names.emplace_back(glfw_extensions[i]);
+            if (m_surface == VK_NULL_HANDLE) {
+                VkResult rslt = glfwCreateWindowSurface(instance(), window(), nullptr, &m_surface);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error creating surface: " << rslt;
+                    return false;
+                }
             }
 
-            VkInstanceCreateInfo inst_ci;
-            inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-            inst_ci.pNext = nullptr;
-            inst_ci.pApplicationInfo = nullptr;
-            inst_ci.enabledLayerCount = 0;
-            inst_ci.ppEnabledLayerNames = nullptr;
-            inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
-            inst_ci.ppEnabledExtensionNames = extension_names.data();
-
-            VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
-            if (rslt == VK_SUCCESS) {
-                BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
-                return m_present.initialize() && m_device.initialize();
-            } else {
-                BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
-                return false;
-            }
+            return m_device.initialize() && m_present.initialize();
         }
 
         void System::dispose() {
             m_device.dispose();
             m_present.dispose();
+
+            if (m_instance != VK_NULL_HANDLE && m_surface != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
+                vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+                m_surface = VK_NULL_HANDLE;
+            }
 
             if (m_instance != VK_NULL_HANDLE) {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
@@ -295,152 +303,6 @@ namespace vgraphplay {
             }
         }
     }
-
-    // void Graphics::shutDown() {
-    //     if (device != VK_NULL_HANDLE && unlit_vertex.module != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying unlit vertex shader module: "
-    //                   << unlit_vertex.module << std::endl;
-    //         vkDestroyShaderModule(device, unlit_vertex.module, nullptr);
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && unlit_fragment.module != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying unlit fragment shader module: "
-    //                   << unlit_fragment.module << std::endl;
-    //         vkDestroyShaderModule(device, unlit_fragment.module, nullptr);
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && uniform_buffer.buffer != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying uniform buffer: "
-    //                   << uniform_buffer.buffer << std::endl;
-    //         vkDestroyBuffer(device, uniform_buffer.buffer, nullptr);
-    //         uniform_buffer.buffer = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && uniform_buffer.memory != VK_NULL_HANDLE) {
-    //         std::cout << "Freeing uniform buffer memory: "
-    //                   << uniform_buffer.memory << std::endl;
-    //         vkFreeMemory(device, uniform_buffer.memory, nullptr);
-    //         uniform_buffer.memory = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && depth_buffer.view != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying depth buffer image view: "
-    //                   << depth_buffer.view << std::endl;
-    //         vkDestroyImageView(device, depth_buffer.view, nullptr);
-    //         depth_buffer.view = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && depth_buffer.image != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying depth buffer image: "
-    //                   << depth_buffer.image << std::endl;
-    //         vkDestroyImage(device, depth_buffer.image, nullptr);
-    //         depth_buffer.image = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && depth_buffer.memory != VK_NULL_HANDLE) {
-    //         std::cout << "Freeing depth buffer memory: "
-    //                   << depth_buffer.memory << std::endl;
-    //         vkFreeMemory(device, depth_buffer.memory, nullptr);
-    //         depth_buffer.memory = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && queue.pool != VK_NULL_HANDLE) {
-    //         if (queue.buffer != VK_NULL_HANDLE) {
-    //             std::cout << "Freeing command buffer: "
-    //                       << queue.buffer << std::endl;
-    //             vkFreeCommandBuffers(device, queue.pool, 1, &queue.buffer);
-    //             queue.buffer = VK_NULL_HANDLE;
-    //         }
-
-    //         std::cout << "Destroying command pool: "
-    //                   << queue.pool << std::endl;
-    //         vkDestroyCommandPool(device, queue.pool, nullptr);
-    //         queue.pool = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE && swapchain.swapchain != VK_NULL_HANDLE) {
-    //         for (auto&& image : swapchain.images) {
-    //             std::cout << "Destroying swapchain image view: "
-    //                       << image.view << std::endl;
-    //             vkDestroyImageView(device, image.view, nullptr);
-    //             image.view = VK_NULL_HANDLE;
-    //         }
-
-    //         std::cout << "Destroying swapchain: "
-    //                   << swapchain.swapchain << std::endl;
-    //         vkDestroySwapchainKHR(device, swapchain.swapchain, nullptr);
-    //         swapchain.swapchain = VK_NULL_HANDLE;
-    //     }
-
-    //     if (device != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying device: "
-    //                   << device << std::endl;
-    //         vkDestroyDevice(device, nullptr);
-    //         device = VK_NULL_HANDLE;
-    //     }
-
-    //     if (instance != VK_NULL_HANDLE && surface != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying surface: "
-    //                   << surface << std::endl;
-    //         vkDestroySurfaceKHR(instance, surface, nullptr);
-    //         surface = VK_NULL_HANDLE;
-    //     }
-
-    //     if (instance != VK_NULL_HANDLE) {
-    //         std::cout << "Destroying instance: "
-    //                   << instance << std::endl;
-    //         vkDestroyInstance(instance, nullptr);
-    //         instance = VK_NULL_HANDLE;
-    //     }
-    // }
-
-    // bool Graphics::initialize(GLFWwindow *_window) {
-    //     if (!initInstance()) {
-    //         std::cerr << "Failed to create Vulkan instance." << std::endl;
-    //         return false;
-    //     }
-
-    //     window = _window;
-    //     glfwCreateWindowSurface(instance, window, nullptr, &surface);
-
-    //     if (!initDevice()) {
-    //         std::cerr << "Failed to create Vulkan device." << std::endl;
-    //         return false;
-    //     }
-
-    //     if (!initCommandQueue()) {
-    //         std::cerr << "Failed to create Vulkan command queue." << std::endl;
-    //         return false;
-    //     }
-
-    //     if (!initSwapchain()) {
-    //         std::cerr << "Failed to create swapchain." << std::endl;
-    //         return false;
-    //     }
-
-    //     if (!initDepthBuffer()) {
-    //         std::cerr << "Failed to create depth buffer." << std::endl;
-    //         return false;
-    //     }
-
-    //     if (!initUniformBuffer()) {
-    //         std::cerr << "Failed to create uniform buffer." << std::endl;
-    //         return false;
-    //     }
-
-    //     if (!initPipelineLayout()) {
-    //         std::cerr << "Failed to create pipeline layout." << std::endl;
-    //         return false;
-    //     }
-
-    //     return true;
-    // }
-
-    // bool Graphics::initInstance() {
-    // }
-
-    // bool Graphics::initDevice() {
-    // }
 
     // bool Graphics::initCommandQueue() {
     //     VkCommandPoolCreateInfo cmd_pool_info;
@@ -477,28 +339,6 @@ namespace vgraphplay {
     // }
 
     // bool Graphics::initSwapchain() {
-    //     VkSurfaceCapabilitiesKHR surf_caps;
-    //     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surf_caps);
-    //     std::cout << "Surface capabilities: " << surf_caps << std::endl;
-
-    //     uint32_t num_formats;
-    //     vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_formats, nullptr);
-    //     std::vector<VkSurfaceFormatKHR> formats(num_formats);
-    //     vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_formats, formats.data());
-
-    //     for (auto&& format : formats) {
-    //         std::cout << "Surface format: [ format: " << format.format << " color space: " << format.colorSpace << " ]" << std::endl;
-    //     }
-
-    //     uint32_t num_modes;
-    //     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &num_modes, nullptr);
-    //     std::vector<VkPresentModeKHR> modes(num_modes);
-    //     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &num_modes, modes.data());
-
-    //     for (auto&& mode : modes) {
-    //         std::cout << "Surface present mode: " << mode << std::endl;
-    //     }
-
     //     VkSwapchainCreateInfoKHR create_info;
     //     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     //     create_info.pNext = nullptr;

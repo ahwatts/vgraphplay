@@ -151,6 +151,7 @@ namespace vgraphplay {
 
             VkInstance& instance();
             VkDevice& device();
+            VkPhysicalDevice& physicalDevice();
             VkSurfaceKHR& surface();
 
         protected:
@@ -169,13 +170,13 @@ namespace vgraphplay {
             void dispose();
 
             VkInstance& instance();
+            VkPhysicalDevice& physicalDevice();
             VkDevice& device();
             VkSurfaceKHR& surface();
             GLFWwindow* window();
 
         protected:
             System *m_parent;
-            VkSurfaceKHR m_surface;
         };
 
         class System {
@@ -188,12 +189,14 @@ namespace vgraphplay {
 
             inline GLFWwindow* window() { return m_window; }
             inline VkInstance& instance() { return m_instance; }
+            inline VkPhysicalDevice& physicalDevice() { return m_device.physicalDevice(); }
             inline VkDevice& device() { return m_device.device(); }
-            inline VkSurfaceKHR& surface() { return m_present.surface(); }
+            inline VkSurfaceKHR& surface() { return m_surface; }
 
         protected:
             GLFWwindow *m_window;
             VkInstance m_instance;
+            VkSurfaceKHR m_surface;
             Device m_device;
             Presentation m_present;
         };

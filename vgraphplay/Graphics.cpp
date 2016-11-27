@@ -29,12 +29,15 @@ namespace vgraphplay {
                 return true;
             }
 
-            logPhysicalDevices(m_parent->instance());
+            // Cache this reference for the moment.
+            VkInstance &inst = instance();
+
+            logPhysicalDevices(inst);
 
             uint32_t num_devices;
-            vkEnumeratePhysicalDevices(m_parent->instance(), &num_devices, nullptr);
+            vkEnumeratePhysicalDevices(inst, &num_devices, nullptr);
             std::vector<VkPhysicalDevice> devices(num_devices);
-            vkEnumeratePhysicalDevices(m_parent->instance(), &num_devices, devices.data());
+            vkEnumeratePhysicalDevices(inst, &num_devices, devices.data());
 
             // We probably want to make a better decision than this...
             m_physical_device = devices[0];
@@ -46,7 +49,7 @@ namespace vgraphplay {
 
             // Choose the first graphics queue...
             for (unsigned int i = 0; i < queue_families.size(); ++i) {
-                int supports_present = glfwGetPhysicalDevicePresentationSupport(m_parent->instance(), m_physical_device, i);
+                int supports_present = glfwGetPhysicalDevicePresentationSupport(inst, m_physical_device, i);
 
                 if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && supports_present == GLFW_TRUE) {
                     m_queue_family = i;
@@ -107,6 +110,14 @@ namespace vgraphplay {
             m_queue_family = UINT32_MAX;
         }
 
+        VkInstance& Device::instance() {
+            return m_parent->instance();
+        }
+
+        VkDevice& Device::device() {
+            return m_device;
+        }
+
         Presentation::Presentation(System *parent)
             : m_parent{parent},
               m_surface{VK_NULL_HANDLE}
@@ -117,7 +128,7 @@ namespace vgraphplay {
         }
 
         bool Presentation::initialize() {
-            VkResult rslt = glfwCreateWindowSurface(m_parent->instance(), m_parent->window(), nullptr, &m_surface);
+            VkResult rslt = glfwCreateWindowSurface(instance(), window(), nullptr, &m_surface);
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
                 return true;
@@ -133,6 +144,18 @@ namespace vgraphplay {
                 vkDestroySurfaceKHR(m_parent->instance(), m_surface, nullptr);
                 m_surface = VK_NULL_HANDLE;
             }
+        }
+
+        VkInstance& Presentation::instance() {
+            return m_parent->instance();
+        }
+
+        VkDevice& Presentation::device() {
+            return m_parent->device();
+        }
+
+        GLFWwindow* Presentation::window() {
+            return m_parent->window();
         }
 
         System::System(GLFWwindow *window)

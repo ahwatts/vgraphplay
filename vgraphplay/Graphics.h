@@ -126,6 +126,9 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
+            VkInstance& instance();
+            VkDevice& device();
+
         protected:
             System *m_parent;
             VkDevice m_device;
@@ -142,6 +145,10 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
+            VkInstance& instance();
+            VkDevice& device();
+            GLFWwindow* window();
+
         protected:
             System *m_parent;
             VkSurfaceKHR m_surface;
@@ -157,6 +164,7 @@ namespace vgraphplay {
 
             inline GLFWwindow* window() { return m_window; }
             inline VkInstance& instance() { return m_instance; }
+            inline VkDevice& device() { return m_device.device(); }
 
         protected:
             GLFWwindow *m_window;

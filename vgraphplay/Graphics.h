@@ -116,7 +116,26 @@ namespace vgraphplay {
     namespace gfx {
         class Device;
         class Presentation;
+        class CommandQueues;
         class System;
+
+        class CommandQueues {
+        public:
+            CommandQueues(Device *parent);
+            ~CommandQueues();
+
+            bool initialize(uint32_t gq_fam, uint32_t pq_fam);
+            void dispose();
+
+            VkDevice& device();
+
+        protected:
+            Device *m_parent;
+            uint32_t m_graphics_queue_family;
+            VkQueue m_graphics_queue;
+            uint32_t m_present_queue_family;
+            VkQueue m_present_queue;
+        };
 
         class Device {
         public:
@@ -126,15 +145,19 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
+            VkPhysicalDevice choosePhysicalDevice(VkInstance &inst);
+            uint32_t chooseGraphicsQueueFamily(VkPhysicalDevice &dev);
+            uint32_t choosePresentQueueFamily(VkPhysicalDevice &dev, VkSurfaceKHR &surf);
+
             VkInstance& instance();
             VkDevice& device();
+            VkSurfaceKHR& surface();
 
         protected:
             System *m_parent;
             VkDevice m_device;
             VkPhysicalDevice m_physical_device;
-            uint32_t m_queue_family;
-            VkQueue m_queue;
+            CommandQueues m_queues;
         };
 
         class Presentation {
@@ -147,6 +170,7 @@ namespace vgraphplay {
 
             VkInstance& instance();
             VkDevice& device();
+            VkSurfaceKHR& surface();
             GLFWwindow* window();
 
         protected:
@@ -165,6 +189,7 @@ namespace vgraphplay {
             inline GLFWwindow* window() { return m_window; }
             inline VkInstance& instance() { return m_instance; }
             inline VkDevice& device() { return m_device.device(); }
+            inline VkSurfaceKHR& surface() { return m_present.surface(); }
 
         protected:
             GLFWwindow *m_window;

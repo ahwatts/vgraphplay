@@ -11,13 +11,45 @@
 
 namespace vgraphplay {
     namespace gfx {
+        CommandQueues::CommandQueues(Device *parent)
+            : m_parent{parent},
+              m_graphics_queue_family{UINT32_MAX},
+              m_graphics_queue{VK_NULL_HANDLE},
+              m_present_queue_family{UINT32_MAX},
+              m_present_queue{VK_NULL_HANDLE}
+        {}
+
+        CommandQueues::~CommandQueues() {
+            dispose();
+        }
+
+        bool CommandQueues::initialize(uint32_t gq_fam, uint32_t pq_fam) {
+            VkDevice &dev = device();
+
+            m_graphics_queue_family = gq_fam;
+            vkGetDeviceQueue(dev, m_graphics_queue_family, 0, &m_graphics_queue);
+            BOOST_LOG_TRIVIAL(trace) << "Graphics queue: " << m_graphics_queue;
+
+            m_present_queue_family = pq_fam;
+            vkGetDeviceQueue(dev, m_present_queue_family, 0, &m_present_queue);
+            BOOST_LOG_TRIVIAL(trace) << "Present queue: " << m_present_queue;
+
+            return true;
+        }
+
+        void CommandQueues::dispose() {
+            // Nothing to do here, yet.
+        }
+
+        VkDevice& CommandQueues::device() {
+            return m_parent->device();
+        }
 
         Device::Device(System *parent)
             : m_parent{parent},
               m_device{VK_NULL_HANDLE},
               m_physical_device{VK_NULL_HANDLE},
-              m_queue_family{UINT32_MAX},
-              m_queue{VK_NULL_HANDLE}
+              m_queues{this}
         {}
 
         Device::~Device() {
@@ -29,44 +61,39 @@ namespace vgraphplay {
                 return true;
             }
 
-            // Cache this reference for the moment.
             VkInstance &inst = instance();
+            VkSurfaceKHR &surf = surface();
+
+            if (inst == VK_NULL_HANDLE || surf == VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create device.";
+                return false;
+            }
 
             logPhysicalDevices(inst);
 
-            uint32_t num_devices;
-            vkEnumeratePhysicalDevices(inst, &num_devices, nullptr);
-            std::vector<VkPhysicalDevice> devices(num_devices);
-            vkEnumeratePhysicalDevices(inst, &num_devices, devices.data());
+            m_physical_device = choosePhysicalDevice(inst);
+            uint32_t graphics_queue_family = chooseGraphicsQueueFamily(m_physical_device);
+            uint32_t present_queue_family = choosePresentQueueFamily(m_physical_device, surf);
 
-            // We probably want to make a better decision than this...
-            m_physical_device = devices[0];
-
-            uint32_t num_queue_families = 0;
-            vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, nullptr);
-            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
-            vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, queue_families.data());
-
-            // Choose the first graphics queue...
-            for (unsigned int i = 0; i < queue_families.size(); ++i) {
-                int supports_present = glfwGetPhysicalDevicePresentationSupport(inst, m_physical_device, i);
-
-                if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && supports_present == GLFW_TRUE) {
-                    m_queue_family = i;
-                    break;
-                }
-            }
-
-            BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device << " queue family = " << m_queue_family;
+            BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device
+                                     << " graphics queue family = " << graphics_queue_family
+                                     << " present queue family = " << present_queue_family;
 
             float queue_priority = 1.0;
-            VkDeviceQueueCreateInfo queue_ci;
-            queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queue_ci.pNext = nullptr;
-            queue_ci.flags = 0;
-            queue_ci.queueFamilyIndex = m_queue_family;
-            queue_ci.queueCount = 1;
-            queue_ci.pQueuePriorities = &queue_priority;
+            VkDeviceQueueCreateInfo queue_ci[2];
+            queue_ci[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queue_ci[0].pNext = nullptr;
+            queue_ci[0].flags = 0;
+            queue_ci[0].queueFamilyIndex = graphics_queue_family;
+            queue_ci[0].queueCount = 1;
+            queue_ci[0].pQueuePriorities = &queue_priority;
+
+            queue_ci[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queue_ci[1].pNext = nullptr;
+            queue_ci[1].flags = 0;
+            queue_ci[1].queueFamilyIndex = present_queue_family;
+            queue_ci[1].queueCount = 1;
+            queue_ci[1].pQueuePriorities = &queue_priority;
 
             std::vector<const char*> extension_names;
             extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -74,8 +101,8 @@ namespace vgraphplay {
             VkDeviceCreateInfo device_ci;
             device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
             device_ci.pNext = nullptr;
-            device_ci.queueCreateInfoCount = 1;
-            device_ci.pQueueCreateInfos = &queue_ci;
+            device_ci.queueCreateInfoCount = 2;
+            device_ci.pQueueCreateInfos = queue_ci;
             device_ci.enabledLayerCount = 0;
             device_ci.ppEnabledLayerNames = nullptr;
             device_ci.pEnabledFeatures = nullptr;
@@ -86,17 +113,16 @@ namespace vgraphplay {
 
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Device created: " << m_device;
+                return m_queues.initialize(graphics_queue_family, present_queue_family);
             } else {
                 BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
                 return false;
             }
-
-            vkGetDeviceQueue(m_device, m_queue_family, 0, &m_queue);
-            BOOST_LOG_TRIVIAL(trace) << "Device queue: " << m_queue;
-            return true;
         }
 
         void Device::dispose() {
+            m_queues.dispose();
+
             if (m_device != VK_NULL_HANDLE) {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying device: " << m_device;
                 vkDestroyDevice(m_device, nullptr);
@@ -106,8 +132,50 @@ namespace vgraphplay {
             // No need to actually destroy the rest of these; they're
             // managed by Vulkan.
             m_physical_device = VK_NULL_HANDLE;
-            m_queue = VK_NULL_HANDLE;
-            m_queue_family = UINT32_MAX;
+        }
+
+        VkPhysicalDevice Device::choosePhysicalDevice(VkInstance &inst) {
+            uint32_t num_devices;
+            vkEnumeratePhysicalDevices(inst, &num_devices, nullptr);
+            std::vector<VkPhysicalDevice> devices(num_devices);
+            vkEnumeratePhysicalDevices(inst, &num_devices, devices.data());
+
+            // We probably want to make a better decision than this...
+            return devices[0];
+        }
+
+        uint32_t Device::chooseGraphicsQueueFamily(VkPhysicalDevice &dev) {
+            uint32_t num_queue_families = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
+            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
+            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
+
+            uint32_t rv = UINT32_MAX;
+            for (unsigned int i = 0; i < queue_families.size(); ++i) {
+                if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                    rv = i;
+                    break;
+                }
+            }
+            return rv;
+        }
+
+        uint32_t Device::choosePresentQueueFamily(VkPhysicalDevice &dev, VkSurfaceKHR &surf) {
+            uint32_t num_queue_families = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
+            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
+            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
+
+            uint32_t rv = UINT32_MAX;
+            for (unsigned int i = 0; i < queue_families.size(); ++i) {
+                VkBool32 supports_present = false;
+                vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surf, &supports_present);
+                if (supports_present) {
+                    rv = i;
+                    break;
+                }
+            }
+            return rv;
         }
 
         VkInstance& Device::instance() {
@@ -116,6 +184,10 @@ namespace vgraphplay {
 
         VkDevice& Device::device() {
             return m_device;
+        }
+
+        VkSurfaceKHR& Device::surface() {
+            return m_parent->surface();
         }
 
         Presentation::Presentation(System *parent)
@@ -128,6 +200,10 @@ namespace vgraphplay {
         }
 
         bool Presentation::initialize() {
+            if (m_surface != VK_NULL_HANDLE) {
+                return true;
+            }
+
             VkResult rslt = glfwCreateWindowSurface(instance(), window(), nullptr, &m_surface);
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
@@ -152,6 +228,10 @@ namespace vgraphplay {
 
         VkDevice& Presentation::device() {
             return m_parent->device();
+        }
+
+        VkSurfaceKHR& Presentation::surface() {
+            return m_surface;
         }
 
         GLFWwindow* Presentation::window() {
@@ -197,7 +277,7 @@ namespace vgraphplay {
             VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
-                return m_device.initialize() && m_present.initialize();
+                return m_present.initialize() && m_device.initialize();
             } else {
                 BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
                 return false;

@@ -81,20 +81,26 @@ namespace vgraphplay {
                                      << " present queue family = " << present_queue_family;
 
             float queue_priority = 1.0;
-            VkDeviceQueueCreateInfo queue_ci[2];
-            queue_ci[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queue_ci[0].pNext = nullptr;
-            queue_ci[0].flags = 0;
-            queue_ci[0].queueFamilyIndex = graphics_queue_family;
-            queue_ci[0].queueCount = 1;
-            queue_ci[0].pQueuePriorities = &queue_priority;
+            std::vector<VkDeviceQueueCreateInfo> queue_cis;
+            VkDeviceQueueCreateInfo queue_ci;
+            queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queue_ci.pNext = nullptr;
+            queue_ci.flags = 0;
+            queue_ci.queueFamilyIndex = graphics_queue_family;
+            queue_ci.queueCount = 1;
+            queue_ci.pQueuePriorities = &queue_priority;
+            queue_cis.push_back(queue_ci);
 
-            queue_ci[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queue_ci[1].pNext = nullptr;
-            queue_ci[1].flags = 0;
-            queue_ci[1].queueFamilyIndex = present_queue_family;
-            queue_ci[1].queueCount = 1;
-            queue_ci[1].pQueuePriorities = &queue_priority;
+            if (present_queue_family != graphics_queue_family) {
+                VkDeviceQueueCreateInfo queue_ci;
+                queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+                queue_ci.pNext = nullptr;
+                queue_ci.flags = 0;
+                queue_ci.queueFamilyIndex = present_queue_family;
+                queue_ci.queueCount = 1;
+                queue_ci.pQueuePriorities = &queue_priority;
+                queue_cis.push_back(queue_ci);
+            }
 
             std::vector<const char*> extension_names;
             extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -102,12 +108,13 @@ namespace vgraphplay {
             VkDeviceCreateInfo device_ci;
             device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
             device_ci.pNext = nullptr;
-            device_ci.queueCreateInfoCount = 2;
-            device_ci.pQueueCreateInfos = queue_ci;
+            device_ci.flags = 0;
+            device_ci.queueCreateInfoCount = queue_cis.size();
+            device_ci.pQueueCreateInfos = queue_cis.data();
             device_ci.enabledLayerCount = 0;
             device_ci.ppEnabledLayerNames = nullptr;
             device_ci.pEnabledFeatures = nullptr;
-            device_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
+            device_ci.enabledExtensionCount = extension_names.size();
             device_ci.ppEnabledExtensionNames = extension_names.data();
 
             VkResult rslt = vkCreateDevice(m_physical_device, &device_ci, nullptr, &m_device);
@@ -359,12 +366,16 @@ namespace vgraphplay {
                     extension_names.emplace_back(glfw_extensions[i]);
                 }
 
+                std::vector<const char*> layer_names;
+                layer_names.emplace_back("VK_LAYER_LUNARG_standard_validation");
+
                 VkInstanceCreateInfo inst_ci;
                 inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
                 inst_ci.pNext = nullptr;
+                inst_ci.flags = 0;
                 inst_ci.pApplicationInfo = nullptr;
-                inst_ci.enabledLayerCount = 0;
-                inst_ci.ppEnabledLayerNames = nullptr;
+                inst_ci.enabledLayerCount = layer_names.size();
+                inst_ci.ppEnabledLayerNames = layer_names.data();
                 inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
                 inst_ci.ppEnabledExtensionNames = extension_names.data();
 

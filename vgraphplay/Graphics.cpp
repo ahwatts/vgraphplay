@@ -72,9 +72,18 @@ namespace vgraphplay {
 
             logPhysicalDevices(inst);
 
-            m_physical_device = choosePhysicalDevice(inst);
-            uint32_t graphics_queue_family = chooseGraphicsQueueFamily(m_physical_device);
-            uint32_t present_queue_family = choosePresentQueueFamily(m_physical_device, surf);
+            uint32_t num_devices;
+            vkEnumeratePhysicalDevices(inst, &num_devices, nullptr);
+            std::vector<VkPhysicalDevice> devices(num_devices);
+            vkEnumeratePhysicalDevices(inst, &num_devices, devices.data());
+            m_physical_device = choosePhysicalDevice(devices);
+
+            uint32_t num_queue_families = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, nullptr);
+            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
+            vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, queue_families.data());
+            uint32_t graphics_queue_family = chooseGraphicsQueueFamily(m_physical_device, queue_families);
+            uint32_t present_queue_family = choosePresentQueueFamily(m_physical_device, queue_families, surf);
 
             BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device
                                      << " graphics queue family = " << graphics_queue_family
@@ -145,48 +154,29 @@ namespace vgraphplay {
             m_physical_device = VK_NULL_HANDLE;
         }
 
-        VkPhysicalDevice Device::choosePhysicalDevice(VkInstance &inst) {
-            uint32_t num_devices;
-            vkEnumeratePhysicalDevices(inst, &num_devices, nullptr);
-            std::vector<VkPhysicalDevice> devices(num_devices);
-            vkEnumeratePhysicalDevices(inst, &num_devices, devices.data());
-
+        VkPhysicalDevice Device::choosePhysicalDevice(const std::vector<VkPhysicalDevice> &devices) {
             // We probably want to make a better decision than this...
             return devices[0];
         }
 
-        uint32_t Device::chooseGraphicsQueueFamily(VkPhysicalDevice &dev) {
-            uint32_t num_queue_families = 0;
-            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
-            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
-            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
-
-            uint32_t rv = UINT32_MAX;
-            for (unsigned int i = 0; i < queue_families.size(); ++i) {
-                if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                    rv = i;
-                    break;
+        uint32_t Device::chooseGraphicsQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families) {
+            for (uint32_t i = 0; i < families.size(); ++i) {
+                if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                    return i;
                 }
             }
-            return rv;
+            return UINT32_MAX;
         }
 
-        uint32_t Device::choosePresentQueueFamily(VkPhysicalDevice &dev, VkSurfaceKHR &surf) {
-            uint32_t num_queue_families = 0;
-            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
-            std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
-            vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
-
-            uint32_t rv = UINT32_MAX;
-            for (unsigned int i = 0; i < queue_families.size(); ++i) {
+        uint32_t Device::choosePresentQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families, VkSurfaceKHR &surf) {
+            for (uint32_t i = 0; i < families.size(); ++i) {
                 VkBool32 supports_present = false;
-                vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surf, &supports_present);
+                vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surf, &supports_present);
                 if (supports_present) {
-                    rv = i;
-                    break;
+                    return i;
                 }
             }
-            return rv;
+            return UINT32_MAX;
         }
 
         GLFWwindow* Device::window() {
@@ -217,6 +207,7 @@ namespace vgraphplay {
             : m_parent{parent},
               m_swapchain{VK_NULL_HANDLE},
               m_swapchain_images{},
+              m_swapchain_image_views{},
               m_format{VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
               m_extent{0, 0}
         {}
@@ -290,9 +281,9 @@ namespace vgraphplay {
 
                 VkResult rslt = vkCreateSwapchainKHR(dev, &swapchain_ci, nullptr, &m_swapchain);
                 if (rslt == VK_SUCCESS) {
-                    BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << m_swapchain << std::endl;
+                    BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << m_swapchain;
                 } else {
-                    BOOST_LOG_TRIVIAL(error) << "Error: " << rslt << " swapchain = " << m_swapchain << std::endl;
+                    BOOST_LOG_TRIVIAL(error) << "Error creating swapchain: " << rslt;
                     return false;
                 }
 
@@ -300,6 +291,34 @@ namespace vgraphplay {
                 vkGetSwapchainImagesKHR(dev, m_swapchain, &num_swapchain_images, nullptr);
                 m_swapchain_images.resize(num_swapchain_images, VK_NULL_HANDLE);
                 vkGetSwapchainImagesKHR(dev, m_swapchain, &num_swapchain_images, m_swapchain_images.data());
+
+                m_swapchain_image_views.resize(num_swapchain_images, VK_NULL_HANDLE);
+                for (unsigned int i = 0; i < m_swapchain_images.size(); ++i) {
+                    VkImageViewCreateInfo iv_ci;
+                    iv_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                    iv_ci.pNext = nullptr;
+                    iv_ci.flags = 0;
+                    iv_ci.image = m_swapchain_images[i];
+                    iv_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                    iv_ci.format = m_format.format;
+                    iv_ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    iv_ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    iv_ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    iv_ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    iv_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    iv_ci.subresourceRange.baseMipLevel = 0;
+                    iv_ci.subresourceRange.levelCount = 1;
+                    iv_ci.subresourceRange.baseArrayLayer = 0;
+                    iv_ci.subresourceRange.layerCount = 1;
+
+                    rslt = vkCreateImageView(dev, &iv_ci, nullptr, &m_swapchain_image_views[i]);
+                    if (rslt == VK_SUCCESS) {
+                        BOOST_LOG_TRIVIAL(trace) << "Created swapchain image view " << i << ": " << m_swapchain_image_views[i];
+                    } else {
+                        BOOST_LOG_TRIVIAL(error) << "Error creating swapchain image view " << i << ": " << rslt;
+                        return false;
+                    }
+                }
             }
 
             return true;
@@ -307,14 +326,25 @@ namespace vgraphplay {
 
         void Presentation::dispose() {
             VkDevice &dev = device();
+            if (dev != VK_NULL_HANDLE) {
+                for (auto&& view : m_swapchain_image_views) {
+                    if (view != VK_NULL_HANDLE) {
+                        BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain image view: " << view;
+                        vkDestroyImageView(dev, view, nullptr);
+                    }
+                }
+                m_swapchain_image_views.clear();
+            }
+
             if (dev != VK_NULL_HANDLE && m_swapchain != VK_NULL_HANDLE) {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain: " << m_swapchain;
                 vkDestroySwapchainKHR(dev, m_swapchain, nullptr);
                 m_swapchain = VK_NULL_HANDLE;
-                m_swapchain_images.clear();
-                m_format = { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-                m_extent = { 0, 0 };
             }
+
+            m_swapchain_images.clear();
+            m_format = { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+            m_extent = { 0, 0 };
         }
 
         VkSurfaceFormatKHR Presentation::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats) {

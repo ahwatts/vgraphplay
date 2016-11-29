@@ -163,6 +163,7 @@ namespace vgraphplay {
             Device *m_parent;
             VkSwapchainKHR m_swapchain;
             std::vector<VkImage> m_swapchain_images;
+            std::vector<VkImageView> m_swapchain_image_views;
             VkSurfaceFormatKHR m_format;
             VkExtent2D m_extent;
         };
@@ -175,9 +176,9 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
-            VkPhysicalDevice choosePhysicalDevice(VkInstance &inst);
-            uint32_t chooseGraphicsQueueFamily(VkPhysicalDevice &dev);
-            uint32_t choosePresentQueueFamily(VkPhysicalDevice &dev, VkSurfaceKHR &surf);
+            VkPhysicalDevice choosePhysicalDevice(const std::vector<VkPhysicalDevice> &devices);
+            uint32_t chooseGraphicsQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families);
+            uint32_t choosePresentQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families, VkSurfaceKHR &surf);
 
             GLFWwindow* window();
             VkDevice& device();

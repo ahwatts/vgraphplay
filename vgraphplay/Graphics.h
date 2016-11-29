@@ -115,6 +115,7 @@ namespace vgraphplay {
 
     namespace gfx {
         class Device;
+        class Pipeline;
         class Presentation;
         class CommandQueues;
         class System;
@@ -138,6 +139,19 @@ namespace vgraphplay {
             VkQueue m_graphics_queue;
             uint32_t m_present_queue_family;
             VkQueue m_present_queue;
+        };
+
+        class Pipeline {
+        public:
+            Pipeline(Device *parent);
+            ~Pipeline();
+
+            bool initialize();
+            void dispose();
+
+        protected:
+            Device *m_parent;
+            VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
         };
 
         class Presentation {

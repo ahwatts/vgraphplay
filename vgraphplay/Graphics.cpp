@@ -203,6 +203,22 @@ namespace vgraphplay {
             return m_queues;
         }
 
+        Pipeline::Pipeline(Device *parent)
+            : m_parent{parent},
+              m_vertex_shader_module{VK_NULL_HANDLE},
+              m_fragment_shader_module{VK_NULL_HANDLE}
+        {}
+
+        Pipeline::~Pipeline() {
+            dispose();
+        }
+
+        bool Pipeline::initialize() {
+            return true;
+        }
+
+        void Pipeline::dispose() {}
+
         Presentation::Presentation(Device *parent)
             : m_parent{parent},
               m_swapchain{VK_NULL_HANDLE},

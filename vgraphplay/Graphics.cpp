@@ -223,7 +223,35 @@ namespace vgraphplay {
         bool Pipeline::initialize() {
             m_vertex_shader_module = createShaderModule("unlit.vert.spv");
             m_fragment_shader_module = createShaderModule("unlit.frag.spv");
-            return m_vertex_shader_module != VK_NULL_HANDLE && m_fragment_shader_module != VK_NULL_HANDLE;
+            if (m_vertex_shader_module == VK_NULL_HANDLE || m_fragment_shader_module == VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Unable to create all of the shader modules.";
+                return false;
+            }
+
+            VkPipelineShaderStageCreateInfo ss_ci[2];
+            ss_ci[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            ss_ci[0].pNext = nullptr;
+            ss_ci[0].flags = 0;
+            ss_ci[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+            ss_ci[0].module = m_vertex_shader_module;
+            ss_ci[0].pName = "main";
+            ss_ci[0].pSpecializationInfo = nullptr;
+
+            ss_ci[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            ss_ci[1].pNext = nullptr;
+            ss_ci[1].flags = 0;
+            ss_ci[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            ss_ci[1].module = m_fragment_shader_module;
+            ss_ci[1].pName = "main";
+            ss_ci[1].pSpecializationInfo = nullptr;
+
+            VkGraphicsPipelineCreateInfo pipeline_ci;
+            pipeline_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            pipeline_ci.pNext = nullptr;
+            pipeline_ci.flags = 0;
+            pipeline_ci.stageCount = 2;
+            pipeline_ci.pStages = ss_ci;
+            // ...
         }
 
         void Pipeline::dispose() {
@@ -261,7 +289,7 @@ namespace vgraphplay {
             VkShaderModule rv = VK_NULL_HANDLE;
             VkResult rslt = vkCreateShaderModule(device(), &sm_ci, nullptr, &rv);
             if (rslt == VK_SUCCESS) {
-                BOOST_LOG_TRIVIAL(trace) << "Created shader module: " << rv;
+                BOOST_LOG_TRIVIAL(trace) << "Created shader module for " << filename << ": " << rv;
             } else {
                 BOOST_LOG_TRIVIAL(trace) << "Failed to create shader module: " << rslt;
             }

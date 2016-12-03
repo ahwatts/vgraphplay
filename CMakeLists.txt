@@ -17,7 +17,7 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS "-Wall")
 endif(CMAKE_COMPILER_IS_GNUCXX)
 
-find_package(Boost REQUIRED COMPONENTS log)
+find_package(Boost REQUIRED COMPONENTS filesystem log)
 message(STATUS "Found Boost version: " ${Boost_VERSION})
 message(STATUS "Found Boost headers: " ${Boost_INCLUDE_DIRS})
 message(STATUS "Found Boost libs:    " ${Boost_LIBRARIES})

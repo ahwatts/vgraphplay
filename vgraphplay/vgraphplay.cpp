@@ -3,11 +3,16 @@
 #include <iostream>
 #include <memory>
 
+#include <boost/filesystem.hpp>
+#include <boost/log/trivial.hpp>
+
 #include "vulkan.h"
 
+#include "AssetFinder.h"
 #include "Graphics.h"
 
 using namespace vgraphplay;
+using namespace boost::filesystem;
 
 void initGLFW(int width, int height, const char *title, GLFWwindow **window);
 void handleGLFWError(int code, const char *desc);
@@ -23,7 +28,11 @@ int main(int argc, char **argv) {
     GLFWwindow *window;
     initGLFW(WIDTH, HEIGHT, "VGraphplay", &window);
 
-    GFX.reset(new gfx::System(window));
+    path bin_path(argv[0]);
+    bin_path.remove_filename();
+    AssetFinder finder(bin_path);
+
+    GFX.reset(new gfx::System(window, finder));
     GFX->initialize();
 
     while (!glfwWindowShouldClose(window)) {

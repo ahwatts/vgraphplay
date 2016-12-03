@@ -50,7 +50,8 @@ namespace vgraphplay {
               m_device{VK_NULL_HANDLE},
               m_physical_device{VK_NULL_HANDLE},
               m_queues{this},
-              m_present{this}
+              m_present{this},
+              m_pipeline{this}
         {}
 
         Device::~Device() {
@@ -136,10 +137,12 @@ namespace vgraphplay {
             }
 
             return m_queues.initialize(graphics_queue_family, present_queue_family) &&
-                m_present.initialize();
+                m_present.initialize() &&
+                m_pipeline.initialize();
         }
 
         void Device::dispose() {
+            m_pipeline.dispose();
             m_present.dispose();
             m_queues.dispose();
 
@@ -203,6 +206,10 @@ namespace vgraphplay {
             return m_queues;
         }
 
+        AssetFinder& Device::assetFinder() {
+            return m_parent->assetFinder();
+        }
+
         Pipeline::Pipeline(Device *parent)
             : m_parent{parent},
               m_vertex_shader_module{VK_NULL_HANDLE},
@@ -214,10 +221,61 @@ namespace vgraphplay {
         }
 
         bool Pipeline::initialize() {
-            return true;
+            m_vertex_shader_module = createShaderModule("unlit.vert.spv");
+            m_fragment_shader_module = createShaderModule("unlit.frag.spv");
+            return m_vertex_shader_module != VK_NULL_HANDLE && m_fragment_shader_module != VK_NULL_HANDLE;
         }
 
-        void Pipeline::dispose() {}
+        void Pipeline::dispose() {
+            VkDevice &dev = device();
+
+            if (dev != VK_NULL_HANDLE && m_vertex_shader_module != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying vertex shader module: " << m_vertex_shader_module;
+                vkDestroyShaderModule(dev, m_vertex_shader_module, nullptr);
+                m_vertex_shader_module = VK_NULL_HANDLE;
+            }
+
+            if (dev != VK_NULL_HANDLE && m_fragment_shader_module != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying fragment shader module: " << m_fragment_shader_module;
+                vkDestroyShaderModule(dev, m_fragment_shader_module, nullptr);
+                m_fragment_shader_module = VK_NULL_HANDLE;
+            }
+        }
+
+        VkShaderModule Pipeline::createShaderModule(const char *filename) {
+            path bytecode_path = assetFinder().findShader(filename);
+            std::ifstream bytecode_file(bytecode_path.string(), std::ios::ate | std::ios::binary);
+            size_t bytecode_size = bytecode_file.tellg();
+            std::vector<char> bytecode(bytecode_size);
+            bytecode_file.seekg(0);
+            bytecode_file.read(bytecode.data(), bytecode_size);
+            bytecode_file.close();
+
+            VkShaderModuleCreateInfo sm_ci;
+            sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            sm_ci.pNext = nullptr;
+            sm_ci.flags = 0;
+            sm_ci.codeSize = bytecode_size;
+            sm_ci.pCode = reinterpret_cast<uint32_t*>(bytecode.data());
+
+            VkShaderModule rv = VK_NULL_HANDLE;
+            VkResult rslt = vkCreateShaderModule(device(), &sm_ci, nullptr, &rv);
+            if (rslt == VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(trace) << "Created shader module: " << rv;
+            } else {
+                BOOST_LOG_TRIVIAL(trace) << "Failed to create shader module: " << rslt;
+            }
+
+            return rv;
+        }
+
+        VkDevice& Pipeline::device() {
+            return m_parent->device();
+        }
+
+        AssetFinder& Pipeline::assetFinder() {
+            return m_parent->assetFinder();
+        }
 
         Presentation::Presentation(Device *parent)
             : m_parent{parent},
@@ -426,9 +484,11 @@ namespace vgraphplay {
             return m_parent->queues();
         }
 
-        System::System(GLFWwindow *window)
+        System::System(GLFWwindow *window, const AssetFinder &asset_finder)
             : m_window{window},
+              m_asset_finder{asset_finder},
               m_instance{VK_NULL_HANDLE},
+              m_surface{VK_NULL_HANDLE},
               m_device{this}
         {}
 
@@ -729,48 +789,6 @@ namespace vgraphplay {
 
     //     return true;
     // }
-
-    // std::vector<char> loadShaderBytecode(const std::string &filename) {
-    //     std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    //     size_t file_size = (size_t)file.tellg();
-    //     std::vector<char> bytecode(file_size);
-    //     file.seekg(0);
-    //     file.read(bytecode.data(), file_size);
-    //     file.close();
-    //     return bytecode;
-    // }
-
-    // bool Graphics::initPipelineLayout() {
-    //     std::vector<char> bytecode = loadShaderBytecode("shaders/unlit.vert.spv");
-    //     VkShaderModuleCreateInfo shader_ci;
-    //     shader_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    //     shader_ci.pNext = nullptr;
-    //     shader_ci.flags = 0;
-    //     shader_ci.codeSize = bytecode.size();
-    //     shader_ci.pCode = reinterpret_cast<uint32_t *>(bytecode.data());
-
-    //     VkResult rslt = vkCreateShaderModule(device, &shader_ci, nullptr, &unlit_vertex.module);
-    //     if (rslt != VK_SUCCESS) {
-    //         std::cerr << "Failed to create unlit vertex shader: " << rslt << " vertex_shader = " << unlit_vertex.module << std::endl;
-    //         return false;
-    //     } else {
-    //         std::cout << "Created unlit vertex shader module " << unlit_vertex.module << std::endl;
-    //     }
-
-    //     bytecode = loadShaderBytecode("shaders/unlit.frag.spv");
-    //     shader_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    //     shader_ci.pNext = nullptr;
-    //     shader_ci.flags = 0;
-    //     shader_ci.codeSize = bytecode.size();
-    //     shader_ci.pCode = reinterpret_cast<uint32_t *>(bytecode.data());
-
-    //     rslt = vkCreateShaderModule(device, &shader_ci, nullptr, &unlit_fragment.module);
-    //     if (rslt != VK_SUCCESS) {
-    //         std::cerr << "Failed to create unlit fragment shader: " << rslt << " vertex_shader = " << unlit_fragment.module << std::endl;
-    //         return false;
-    //     } else {
-    //         std::cout << "Created unlit fragment shader module " << unlit_fragment.module << std::endl;
-    //     }
 
     //     VkPipelineShaderStageCreateInfo vertex_stage_ci;
     //     vertex_stage_ci.sType = VK_STRUCTURE_TYPE_SHADER_STAGE_CREATE_INFO;

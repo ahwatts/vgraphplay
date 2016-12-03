@@ -12,6 +12,8 @@
 #include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
 
+#include "AssetFinder.h"
+
 namespace vgraphplay {
     // struct CommandQueueInfo {
     //     uint32_t family;
@@ -149,6 +151,12 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
+            VkDevice& device();
+
+            VkShaderModule createShaderModule(const char *filename);
+
+            AssetFinder& assetFinder();
+
         protected:
             Device *m_parent;
             VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
@@ -201,6 +209,7 @@ namespace vgraphplay {
             VkSurfaceKHR& surface();
 
             CommandQueues& queues();
+            AssetFinder& assetFinder();
 
         protected:
             System *m_parent;
@@ -208,11 +217,12 @@ namespace vgraphplay {
             VkPhysicalDevice m_physical_device;
             CommandQueues m_queues;
             Presentation m_present;
+            Pipeline m_pipeline;
         };
 
         class System {
         public:
-            System(GLFWwindow *window);
+            System(GLFWwindow *window, const AssetFinder &asset_finder);
             ~System();
 
             bool initialize();
@@ -225,9 +235,11 @@ namespace vgraphplay {
             inline VkSurfaceKHR& surface() { return m_surface; }
 
             inline CommandQueues& queues() { return m_device.queues(); }
+            inline AssetFinder& assetFinder() { return m_asset_finder; }
 
         protected:
             GLFWwindow *m_window;
+            AssetFinder m_asset_finder;
             VkInstance m_instance;
             VkSurfaceKHR m_surface;
             Device m_device;

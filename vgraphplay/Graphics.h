@@ -156,6 +156,7 @@ namespace vgraphplay {
             VkShaderModule createShaderModule(const char *filename);
 
             AssetFinder& assetFinder();
+            Presentation& presentation();
 
         protected:
             Device *m_parent;
@@ -178,6 +179,7 @@ namespace vgraphplay {
             VkDevice& device();
             VkPhysicalDevice& physicalDevice();
             VkSurfaceKHR& surface();
+            VkExtent2D& swapchainExtent();
 
             CommandQueues& queues();
 
@@ -210,6 +212,7 @@ namespace vgraphplay {
 
             CommandQueues& queues();
             AssetFinder& assetFinder();
+            Presentation& presentation();
 
         protected:
             System *m_parent;

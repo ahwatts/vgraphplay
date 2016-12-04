@@ -210,6 +210,10 @@ namespace vgraphplay {
             return m_parent->assetFinder();
         }
 
+        Presentation& Device::presentation() {
+            return m_present;
+        }
+
         Pipeline::Pipeline(Device *parent)
             : m_parent{parent},
               m_vertex_shader_module{VK_NULL_HANDLE},
@@ -245,12 +249,49 @@ namespace vgraphplay {
             ss_ci[1].pName = "main";
             ss_ci[1].pSpecializationInfo = nullptr;
 
+            VkPipelineVertexInputStateCreateInfo vert_in_ci;
+            vert_in_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+            vert_in_ci.pNext = nullptr;
+            vert_in_ci.flags = 0;
+            vert_in_ci.vertexBindingDescriptionCount = 0;
+            vert_in_ci.pVertexBindingDescriptions = nullptr;
+            vert_in_ci.vertexAttributeDescriptionCount = 0;
+            vert_in_ci.pVertexAttributeDescriptions = nullptr;
+
+            VkPipelineInputAssemblyStateCreateInfo input_asm_ci;
+            input_asm_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            input_asm_ci.pNext = nullptr;
+            input_asm_ci.flags = 0;
+            input_asm_ci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            input_asm_ci.primitiveRestartEnable = VK_FALSE;
+
+            VkExtent2D &extent = presentation().swapchainExtent();
+            VkViewport viewport = {
+                0.0, 0.0,
+                static_cast<float>(extent.width),
+                static_cast<float>(extent.height),
+                0.0, 1.0
+            };
+
+            VkPipelineViewportStateCreateInfo vp_ci;
+            vp_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+            vp_ci.pNext = nullptr;
+            vp_ci.flags = 0;
+            vp_ci.viewportCount = 1;
+            vp_ci.pViewports = &viewport;
+            vp_ci.scissorCount = 0;
+            vp_ci.pScissors = nullptr;
+
             VkGraphicsPipelineCreateInfo pipeline_ci;
             pipeline_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
             pipeline_ci.pNext = nullptr;
             pipeline_ci.flags = 0;
             pipeline_ci.stageCount = 2;
             pipeline_ci.pStages = ss_ci;
+            pipeline_ci.pVertexInputState = &vert_in_ci;
+            pipeline_ci.pInputAssemblyState = &input_asm_ci;
+            pipeline_ci.pTessellationState = nullptr;
+            pipeline_ci.pViewportState = &vp_ci;
             // ...
         }
 
@@ -303,6 +344,10 @@ namespace vgraphplay {
 
         AssetFinder& Pipeline::assetFinder() {
             return m_parent->assetFinder();
+        }
+
+        Presentation& Pipeline::presentation() {
+            return m_parent->presentation();
         }
 
         Presentation::Presentation(Device *parent)
@@ -506,6 +551,10 @@ namespace vgraphplay {
 
         VkSurfaceKHR& Presentation::surface() {
             return m_parent->surface();
+        }
+
+        VkExtent2D& Presentation::swapchainExtent() {
+            return m_extent;
         }
 
         CommandQueues& Presentation::queues() {

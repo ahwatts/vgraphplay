@@ -161,6 +161,9 @@ namespace vgraphplay {
         protected:
             Device *m_parent;
             VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
+            VkPipelineLayout m_pipeline_layout;
+            VkRenderPass m_render_pass;
+            VkPipeline m_pipeline;
         };
 
         class Presentation {
@@ -180,6 +183,7 @@ namespace vgraphplay {
             VkPhysicalDevice& physicalDevice();
             VkSurfaceKHR& surface();
             VkExtent2D& swapchainExtent();
+            VkSurfaceFormatKHR& swapchainFormat();
 
             CommandQueues& queues();
 

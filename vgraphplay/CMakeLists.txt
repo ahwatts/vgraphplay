@@ -6,4 +6,4 @@ add_executable(vgraphplay
 target_link_libraries(vgraphplay
   ${Boost_LIBRARIES}
   ${Vulkan_LIBRARIES}
-  ${GLFW_LIBRARIES})
+  glfw)

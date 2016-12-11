@@ -23,10 +23,36 @@ message(STATUS "Found Boost headers: " ${Boost_INCLUDE_DIRS})
 message(STATUS "Found Boost libs:    " ${Boost_LIBRARIES})
 
 find_package(Vulkan REQUIRED)
-find_package(glfw3 REQUIRED CONFIG)
-message(STATUS "Found GLFW: " ${glfw3_DIR})
-find_package(glm REQUIRED)
-message(STATUS "Found GLM: " ${glm_DIR})
+
+find_package(glfw3 QUIET)
+if(NOT ${glfw3_FOUND})
+  find_path(GLFW_INCLUDE_DIRS NAMES GL/glfw3.h GLFW/glfw3.h)
+  find_file(GLFW_FULL_HEADER_PATH NAMES GL/glfw3.h GLFW/glfw3.h)
+  if(MSVC)
+    find_library(GLFW_LIBRARY NAMES glfw3dll)
+  else()
+    find_library(GLFW_LIBRARY NAMES glfw3 glfw glfw3dll glfwdll)
+  endif(MSVC)
+  set(GLFW_LIBRARIES ${GLFW_LIBRARY})
+  message(STATUS "Found GLFW include: " ${GLFW_INCLUDE_DIRS})
+  message(STATUS "Found GLFW libs: " ${GLFW_LIBRARIES})
+
+  add_library(glfw STATIC IMPORTED)
+  set_property(TARGET glfw PROPERTY IMPORTED_LOCATION ${GLFW_LIBRARY})
+  set_property(TARGET glfw PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${GLFW_INCLUDE_DIRS})
+  set_property(TARGET glfw PROPERTY INTERFACE_LINK_LIBRARIES ${GLFW_LIBRARIES})
+endif(NOT ${glfw3_FOUND})
+
+find_package(glm QUIET)
+if(NOT ${glm_FOUND})
+  find_path(GLM_INCLUDE_PATH glm/glm.hpp PATHS ${CMAKE_PREFIX_PATH}/include NO_DEFAULT_PATH)
+  find_path(GLM_INCLUDE_PATH glm/glm.hpp)
+  set(GLM_INCLUDE_DIRS ${GLM_INCLUDE_PATH})
+  message(STATUS "Found glm include: " ${GLM_INCLUDE_DIRS})
+
+  add_library(glm STATIC IMPORTED)
+  set_property(TARGET glm PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${GLM_INCLUDE_DIRS})
+endif(NOT ${glm_FOUND})
 
 include_directories(AFTER SYSTEM
   ${Boost_INCLUDE_DIRS}

@@ -3,6 +3,7 @@
 #include "VulkanOutput.h"
 
 #include <sstream>
+#include <vector>
 
 #include <boost/log/trivial.hpp>
 

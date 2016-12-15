@@ -4,6 +4,7 @@
 #include <memory>
 
 #include <boost/filesystem.hpp>
+#define BOOST_LOG_DYN_LINK
 #include <boost/log/trivial.hpp>
 
 #include "vulkan.h"

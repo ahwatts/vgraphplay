@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 
+#define BOOST_LOG_DYN_LINK
 #include <boost/log/trivial.hpp>
 
 #include "VulkanOutput.h"

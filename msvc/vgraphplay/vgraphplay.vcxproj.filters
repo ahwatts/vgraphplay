@@ -21,21 +21,12 @@
     <ClCompile Include="..\..\vgraphplay\Graphics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\vgraphplay\System.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\vgraphplay\VulkanOutput.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\vgraphplay\Win32.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\vgraphplay\Graphics.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\vgraphplay\System.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\vgraphplay\vulkan.h">
@@ -44,10 +35,7 @@
     <ClInclude Include="..\..\vgraphplay\VulkanOutput.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\vgraphplay\Win32.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\vgraphplay\windows.h">
+    <ClInclude Include="..\..\vgraphplay\AssetFinder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

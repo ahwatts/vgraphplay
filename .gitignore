@@ -3,6 +3,7 @@
 /msvc/**/*.VC.opendb
 /msvc/vgraphplay/Debug
 /msvc/vgraphplay/x64
+/msvc/Debug
 /msvc/x64
 *.suo
 gmon.out

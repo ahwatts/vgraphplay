@@ -481,22 +481,29 @@ namespace vgraphplay {
         }
 
         VkShaderModule Pipeline::createShaderModule(const char *filename) {
-            path bytecode_path = assetFinder().findShader(filename);
-            std::ifstream bytecode_file(bytecode_path.string(), std::ios::ate | std::ios::binary);
-            size_t bytecode_size = bytecode_file.tellg();
-            std::vector<char> bytecode(bytecode_size);
-            bytecode_file.seekg(0);
-            bytecode_file.read(bytecode.data(), bytecode_size);
-            bytecode_file.close();
+            VkShaderModule rv = VK_NULL_HANDLE;
 
             VkShaderModuleCreateInfo sm_ci;
             sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             sm_ci.pNext = nullptr;
             sm_ci.flags = 0;
-            sm_ci.codeSize = bytecode_size;
+
+            path bytecode_path = assetFinder().findShader(filename);
+            if (!exists(bytecode_path)) {
+                BOOST_LOG_TRIVIAL(error) << "Cannot find file " << bytecode_path;
+                return rv;
+            }
+
+            std::ifstream bytecode_file(bytecode_path.string(), std::ios::ate | std::ios::binary);
+            std::ifstream::streamoff bytecode_size = bytecode_file.tellg();
+            std::vector<char> bytecode(static_cast<unsigned int>(bytecode_size));
+            bytecode_file.seekg(0);
+            bytecode_file.read(bytecode.data(), bytecode_size);
+            bytecode_file.close();
+
+            sm_ci.codeSize = static_cast<size_t>(bytecode_size);
             sm_ci.pCode = reinterpret_cast<uint32_t*>(bytecode.data());
 
-            VkShaderModule rv = VK_NULL_HANDLE;
             VkResult rslt = vkCreateShaderModule(device(), &sm_ci, nullptr, &rv);
             if (rslt == VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(trace) << "Created shader module for " << filename << ": " << rv;

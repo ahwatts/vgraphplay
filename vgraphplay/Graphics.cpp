@@ -5,7 +5,9 @@
 #include <fstream>
 #include <iostream>
 
+#ifndef _WIN32
 #define BOOST_LOG_DYN_LINK
+#endif
 #include <boost/log/trivial.hpp>
 
 #include "VulkanOutput.h"

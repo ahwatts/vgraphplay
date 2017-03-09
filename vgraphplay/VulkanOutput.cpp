@@ -5,9 +5,6 @@
 #include <sstream>
 #include <vector>
 
-#ifndef _WIN32
-#define BOOST_LOG_DYN_LINK
-#endif
 #include <boost/log/trivial.hpp>
 
 namespace vgraphplay {

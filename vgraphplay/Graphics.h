@@ -164,6 +164,7 @@ namespace vgraphplay {
             VkPipelineLayout m_pipeline_layout;
             VkRenderPass m_render_pass;
             VkPipeline m_pipeline;
+            std::vector<VkFramebuffer> m_swapchain_framebuffers;
         };
 
         class Presentation {
@@ -184,6 +185,7 @@ namespace vgraphplay {
             VkSurfaceKHR& surface();
             VkExtent2D& swapchainExtent();
             VkSurfaceFormatKHR& swapchainFormat();
+            std::vector<VkImageView>& swapchainImageViews();
 
             CommandQueues& queues();
 

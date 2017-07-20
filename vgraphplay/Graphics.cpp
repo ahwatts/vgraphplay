@@ -220,7 +220,8 @@ namespace vgraphplay {
               m_fragment_shader_module{VK_NULL_HANDLE},
               m_pipeline_layout{VK_NULL_HANDLE},
               m_render_pass{VK_NULL_HANDLE},
-              m_pipeline{VK_NULL_HANDLE}
+              m_pipeline{VK_NULL_HANDLE},
+              m_swapchain_framebuffers{}
         {}
 
         Pipeline::~Pipeline() {
@@ -443,11 +444,41 @@ namespace vgraphplay {
                 return false;
             }
 
+            std::vector<VkImageView> &swapchain_image_views = presentation().swapchainImageViews();
+            m_swapchain_framebuffers.resize(swapchain_image_views.size());
+            for (unsigned int i = 0; i < swapchain_image_views.size(); ++i) {
+                VkImageView attachments[] = { swapchain_image_views[i] };
+
+                VkFramebufferCreateInfo fb_ci;
+                fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                fb_ci.renderPass = m_render_pass;
+                fb_ci.attachmentCount = 1;
+                fb_ci.pAttachments = attachments;
+                fb_ci.width = extent.width;
+                fb_ci.height = extent.height;
+                fb_ci.layers = 1;
+
+                rslt = vkCreateFramebuffer(dev, &fb_ci, nullptr, &m_swapchain_framebuffers[i]);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Created swapchain framebuffer " << i << ": " << m_swapchain_framebuffers[i];
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error creating swapchain framebuffer " << i << ": " << rslt;
+                    return false;
+                }
+            }
+
             return true;
         }
 
         void Pipeline::dispose() {
             VkDevice &dev = device();
+
+            if (dev != VK_NULL_HANDLE && m_swapchain_framebuffers.size() > 0) {
+                for (unsigned int i = 0; i < m_swapchain_framebuffers.size(); ++i) {
+                    BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain framebuffer " << i << ": " << m_swapchain_framebuffers[i];
+                    vkDestroyFramebuffer(dev, m_swapchain_framebuffers[i], nullptr);
+                }
+            }
 
             if (dev != VK_NULL_HANDLE && m_pipeline != VK_NULL_HANDLE) {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying pipeline: " << m_pipeline;
@@ -734,6 +765,10 @@ namespace vgraphplay {
 
         VkSurfaceFormatKHR& Presentation::swapchainFormat() {
             return m_format;
+        }
+
+        std::vector<VkImageView>& Presentation::swapchainImageViews() {
+            return m_swapchain_image_views;
         }
 
         CommandQueues& Presentation::queues() {

@@ -23,7 +23,7 @@ message(STATUS "Found Boost headers: " ${Boost_INCLUDE_DIRS})
 message(STATUS "Found Boost libs:    " ${Boost_LIBRARIES})
 
 if(NOT WIN32)
-  add_defines(-DBOOST_LOG_DYN_LINK)
+  add_definitions(-DBOOST_LOG_DYN_LINK)
 endif(NOT WIN32)
 
 find_package(Vulkan REQUIRED)

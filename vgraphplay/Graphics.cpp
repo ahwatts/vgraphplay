@@ -45,11 +45,51 @@ namespace vgraphplay {
             return m_parent->device();
         }
 
+        CommandStore::CommandStore(Device *parent)
+            : m_parent{parent},
+              m_pool{VK_NULL_HANDLE}
+        {}
+
+        CommandStore::~CommandStore() {
+            dispose();
+        }
+
+        bool CommandStore::initialize(CommandQueues &queues) {
+            VkDevice &dev = m_parent->device();
+
+            VkCommandPoolCreateInfo cp_ci;
+            cp_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            cp_ci.pNext = nullptr;
+            cp_ci.flags = 0;
+            cp_ci.queueFamilyIndex = queues.graphicsQueueFamily();
+
+            VkResult rslt = vkCreateCommandPool(dev, &cp_ci, nullptr, &m_pool);
+
+            if (rslt == VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(trace) << "Created command pool: " << m_pool;
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Error creating command pool " << rslt;
+                return false;
+            }
+
+            return true;
+        }
+
+        void CommandStore::dispose() {
+            VkDevice &dev = m_parent->device();
+
+            if (dev != VK_NULL_HANDLE && m_pool != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying command pool: " << m_pool;
+                vkDestroyCommandPool(dev, m_pool, nullptr);
+            }
+        }
+
         Device::Device(System *parent)
             : m_parent{parent},
               m_device{VK_NULL_HANDLE},
               m_physical_device{VK_NULL_HANDLE},
               m_queues{this},
+              m_commands{this},
               m_present{this},
               m_pipeline{this}
         {}
@@ -138,10 +178,12 @@ namespace vgraphplay {
 
             return m_queues.initialize(graphics_queue_family, present_queue_family) &&
                 m_present.initialize() &&
-                m_pipeline.initialize();
+                m_pipeline.initialize() &&
+                m_commands.initialize(m_queues);
         }
 
         void Device::dispose() {
+            m_commands.dispose();
             m_pipeline.dispose();
             m_present.dispose();
             m_queues.dispose();

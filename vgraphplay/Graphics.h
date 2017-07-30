@@ -120,6 +120,7 @@ namespace vgraphplay {
         class Pipeline;
         class Presentation;
         class CommandQueues;
+        class CommandStore;
         class System;
 
         class CommandQueues {
@@ -141,6 +142,19 @@ namespace vgraphplay {
             VkQueue m_graphics_queue;
             uint32_t m_present_queue_family;
             VkQueue m_present_queue;
+        };
+
+        class CommandStore {
+        public:
+            CommandStore(Device *parent);
+            ~CommandStore();
+
+            bool initialize(CommandQueues &queues);
+            void dispose();
+
+        protected:
+            Device *m_parent;
+            VkCommandPool m_pool;
         };
 
         class Pipeline {
@@ -225,6 +239,7 @@ namespace vgraphplay {
             VkDevice m_device;
             VkPhysicalDevice m_physical_device;
             CommandQueues m_queues;
+            CommandStore m_commands;
             Presentation m_present;
             Pipeline m_pipeline;
         };

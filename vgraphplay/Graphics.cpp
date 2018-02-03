@@ -493,6 +493,7 @@ namespace vgraphplay {
 
                 VkFramebufferCreateInfo fb_ci;
                 fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                fb_ci.flags = 0;
                 fb_ci.renderPass = m_render_pass;
                 fb_ci.attachmentCount = 1;
                 fb_ci.pAttachments = attachments;

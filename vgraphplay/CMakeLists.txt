@@ -6,4 +6,5 @@ add_executable(vgraphplay
 target_link_libraries(vgraphplay
   ${Boost_LIBRARIES}
   ${Vulkan_LIBRARIES}
+  ${CMAKE_THREAD_LIBS_INIT}
   glfw)

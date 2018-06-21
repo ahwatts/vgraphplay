@@ -47,7 +47,8 @@ namespace vgraphplay {
 
         CommandStore::CommandStore(Device *parent)
             : m_parent{parent},
-              m_pool{VK_NULL_HANDLE}
+              m_pool{VK_NULL_HANDLE},
+              m_buffers{}
         {}
 
         CommandStore::~CommandStore() {
@@ -69,6 +70,25 @@ namespace vgraphplay {
                 BOOST_LOG_TRIVIAL(trace) << "Created command pool: " << m_pool;
             } else {
                 BOOST_LOG_TRIVIAL(error) << "Error creating command pool " << rslt;
+                return false;
+            }
+
+            uint32_t num_buffers = m_parent->pipeline().swapchainFramebuffers().size();
+            m_buffers.resize(num_buffers);
+
+            VkCommandBufferAllocateInfo cb_ai;
+            cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            cb_ai.pNext = nullptr;
+            cb_ai.commandPool = m_pool;
+            cb_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            cb_ai.commandBufferCount = num_buffers;
+
+            rslt = vkAllocateCommandBuffers(dev, &cb_ai, m_buffers.data());
+
+            if (rslt == VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(trace) << "Created " << m_buffers.size() << " command buffers";
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Error creating command buffers " << rslt;
                 return false;
             }
 
@@ -254,6 +274,10 @@ namespace vgraphplay {
 
         Presentation& Device::presentation() {
             return m_present;
+        }
+
+        Pipeline& Device::pipeline() {
+            return m_pipeline;
         }
 
         Pipeline::Pipeline(Device *parent)
@@ -493,6 +517,7 @@ namespace vgraphplay {
 
                 VkFramebufferCreateInfo fb_ci;
                 fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                fb_ci.pNext = nullptr;
                 fb_ci.flags = 0;
                 fb_ci.renderPass = m_render_pass;
                 fb_ci.attachmentCount = 1;
@@ -597,6 +622,10 @@ namespace vgraphplay {
 
         Presentation& Pipeline::presentation() {
             return m_parent->presentation();
+        }
+
+        std::vector<VkFramebuffer>& Pipeline::swapchainFramebuffers() {
+            return m_swapchain_framebuffers;
         }
 
         Presentation::Presentation(Device *parent)

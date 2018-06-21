@@ -155,6 +155,7 @@ namespace vgraphplay {
         protected:
             Device *m_parent;
             VkCommandPool m_pool;
+			std::vector<VkCommandBuffer> m_buffers;
         };
 
         class Pipeline {
@@ -171,6 +172,7 @@ namespace vgraphplay {
 
             AssetFinder& assetFinder();
             Presentation& presentation();
+			std::vector<VkFramebuffer>& swapchainFramebuffers();
 
         protected:
             Device *m_parent;
@@ -233,6 +235,7 @@ namespace vgraphplay {
             CommandQueues& queues();
             AssetFinder& assetFinder();
             Presentation& presentation();
+			Pipeline& pipeline();
 
         protected:
             System *m_parent;

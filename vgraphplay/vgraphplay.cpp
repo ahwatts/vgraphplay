@@ -34,9 +34,11 @@ int main(int argc, char **argv) {
 
     GFX.reset(new gfx::System(window, finder));
     GFX->initialize();
+    GFX->recordCommands();
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        GFX->drawFrame();
     }
 
     delete GFX.release();

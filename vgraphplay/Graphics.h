@@ -135,6 +135,8 @@ namespace vgraphplay {
 
             inline uint32_t graphicsQueueFamily() const { return m_graphics_queue_family; }
             inline uint32_t presentQueueFamily() const { return m_present_queue_family; }
+            inline VkQueue& graphicsQueue() { return m_graphics_queue; }
+            inline VkQueue& presentQueue() { return m_present_queue; }
 
         protected:
             Device *m_parent;
@@ -152,10 +154,12 @@ namespace vgraphplay {
             bool initialize(CommandQueues &queues);
             void dispose();
 
+            inline std::vector<VkCommandBuffer>& commandBuffers() { return m_buffers; }
+
         protected:
             Device *m_parent;
             VkCommandPool m_pool;
-			std::vector<VkCommandBuffer> m_buffers;
+            std::vector<VkCommandBuffer> m_buffers;
         };
 
         class Pipeline {
@@ -169,10 +173,12 @@ namespace vgraphplay {
             VkDevice& device();
 
             VkShaderModule createShaderModule(const char *filename);
+            inline VkRenderPass& renderPass() { return m_render_pass; }
+            inline VkPipeline& pipeline() { return m_pipeline; }
 
             AssetFinder& assetFinder();
             Presentation& presentation();
-			std::vector<VkFramebuffer>& swapchainFramebuffers();
+            std::vector<VkFramebuffer>& swapchainFramebuffers();
 
         protected:
             Device *m_parent;
@@ -199,6 +205,7 @@ namespace vgraphplay {
             VkDevice& device();
             VkPhysicalDevice& physicalDevice();
             VkSurfaceKHR& surface();
+            inline VkSwapchainKHR& swapchain() { return m_swapchain; }
             VkExtent2D& swapchainExtent();
             VkSurfaceFormatKHR& swapchainFormat();
             std::vector<VkImageView>& swapchainImageViews();
@@ -233,9 +240,10 @@ namespace vgraphplay {
             VkSurfaceKHR& surface();
 
             CommandQueues& queues();
+            CommandStore& commandStore();
             AssetFinder& assetFinder();
             Presentation& presentation();
-			Pipeline& pipeline();
+            Pipeline& pipeline();
 
         protected:
             System *m_parent;
@@ -255,14 +263,20 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
+            bool recordCommands();
+            void drawFrame();
+
             inline GLFWwindow* window() { return m_window; }
             inline VkDevice& device() { return m_device.device(); }
             inline VkInstance& instance() { return m_instance; }
             inline VkPhysicalDevice& physicalDevice() { return m_device.physicalDevice(); }
             inline VkSurfaceKHR& surface() { return m_surface; }
 
+            inline CommandStore& commandStore() { return m_device.commandStore(); }
             inline CommandQueues& queues() { return m_device.queues(); }
             inline AssetFinder& assetFinder() { return m_asset_finder; }
+            inline Presentation& presentation() { return m_device.presentation(); }
+            inline Pipeline& pipeline() { return m_device.pipeline(); }
 
         protected:
             GLFWwindow *m_window;
@@ -270,6 +284,8 @@ namespace vgraphplay {
             VkInstance m_instance;
             VkSurfaceKHR m_surface;
             Device m_device;
+            VkSemaphore m_image_available_semaphore;
+            VkSemaphore m_render_finished_semaphore;
         };
     }
 }

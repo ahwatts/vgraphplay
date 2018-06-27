@@ -268,6 +268,10 @@ namespace vgraphplay {
             return m_queues;
         }
 
+        CommandStore& Device::commandStore() {
+            return m_commands;
+        }
+
         AssetFinder& Device::assetFinder() {
             return m_parent->assetFinder();
         }
@@ -470,8 +474,16 @@ namespace vgraphplay {
             rp_ci.pAttachments = &color_att;
             rp_ci.subpassCount = 1;
             rp_ci.pSubpasses = &subpass;
-            rp_ci.dependencyCount = 0;
-            rp_ci.pDependencies = nullptr;
+
+            VkSubpassDependency sd;
+            sd.srcSubpass = VK_SUBPASS_EXTERNAL;
+            sd.dstSubpass = 0;
+            sd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            sd.srcAccessMask = 0;
+            sd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            sd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            rp_ci.dependencyCount = 1;
+            rp_ci.pDependencies = &sd;
 
             rslt = vkCreateRenderPass(dev, &rp_ci, nullptr, &m_render_pass);
             if (rslt == VK_SUCCESS) {
@@ -852,7 +864,9 @@ namespace vgraphplay {
               m_asset_finder{asset_finder},
               m_instance{VK_NULL_HANDLE},
               m_surface{VK_NULL_HANDLE},
-              m_device{this}
+              m_device{this},
+              m_image_available_semaphore{VK_NULL_HANDLE},
+              m_render_finished_semaphore{VK_NULL_HANDLE}
         {}
 
         System::~System() {
@@ -904,10 +918,45 @@ namespace vgraphplay {
                 }
             }
 
-            return m_device.initialize();
+            if (m_device.initialize()) {
+                VkSemaphoreCreateInfo sem_ci;
+                sem_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+                sem_ci.pNext = nullptr;
+                sem_ci.flags = 0;
+
+                VkResult rslt = vkCreateSemaphore(device(), &sem_ci, nullptr, &m_image_available_semaphore);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Created image available semaphore: " << m_image_available_semaphore;
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error creating image available semaphore: " << rslt;
+                    return false;
+                }
+
+                rslt = vkCreateSemaphore(device(), &sem_ci, nullptr, &m_render_finished_semaphore);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Created render finished semaphore: " << m_render_finished_semaphore;
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error creating render finished semaphore: " << rslt;
+                    return false;
+                }
+
+                return true;
+            } else {
+                return false;
+            }
         }
 
         void System::dispose() {
+            if (m_image_available_semaphore != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying image available semaphore: " << m_image_available_semaphore;
+                vkDestroySemaphore(device(), m_image_available_semaphore, nullptr);
+            }
+
+            if (m_render_finished_semaphore != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying render finished semaphore: " << m_render_finished_semaphore;
+                vkDestroySemaphore(device(), m_render_finished_semaphore, nullptr);
+            }
+
             m_device.dispose();
 
             if (m_instance != VK_NULL_HANDLE && m_surface != VK_NULL_HANDLE) {
@@ -921,6 +970,92 @@ namespace vgraphplay {
                 vkDestroyInstance(m_instance, nullptr);
                 m_instance = VK_NULL_HANDLE;
             }
+        }
+
+        bool System::recordCommands() {
+            CommandStore &commandStore = this->commandStore();
+            Pipeline &pipeline = this->pipeline();
+            Presentation &presentation = this->presentation();
+
+            std::vector<VkCommandBuffer> &commandBuffers = commandStore.commandBuffers();
+            std::vector<VkFramebuffer> &swapchainFramebuffers = pipeline.swapchainFramebuffers();
+
+            for (unsigned int i = 0; i < commandBuffers.size(); ++i) {
+                VkCommandBufferBeginInfo cb_bi;
+                cb_bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                cb_bi.pNext = nullptr;
+                cb_bi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+                cb_bi.pInheritanceInfo = nullptr;
+
+                VkResult rslt = vkBeginCommandBuffer(commandBuffers[i], &cb_bi);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Beginning recording to command buffer " << commandBuffers[i];
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error beginning command buffer recording: " << rslt;
+                    return false;
+                }
+
+                VkRenderPassBeginInfo rp_bi;
+                rp_bi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                rp_bi.pNext = nullptr;
+                rp_bi.renderPass = pipeline.renderPass();
+                rp_bi.framebuffer = swapchainFramebuffers[i];
+                rp_bi.renderArea.offset = { 0, 0 };
+                rp_bi.renderArea.extent = presentation.swapchainExtent();
+
+                VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+                rp_bi.clearValueCount = 1;
+                rp_bi.pClearValues = &clearColor;
+
+                vkCmdBeginRenderPass(commandBuffers[i], &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline());
+                vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+                vkCmdEndRenderPass(commandBuffers[i]);
+
+                rslt = vkEndCommandBuffer(commandBuffers[i]);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Finished recording to command buffer " << commandBuffers[i];
+                } else {
+                    BOOST_LOG_TRIVIAL(trace) << "Error finishing command buffer recording: " << rslt;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void System::drawFrame() {
+            VkSwapchainKHR swapchain = presentation().swapchain();
+            std::vector<VkCommandBuffer> &command_buffers = commandStore().commandBuffers();
+            VkQueue &graphics_queue = queues().graphicsQueue();
+
+            uint32_t image_index;
+            vkAcquireNextImageKHR(device(), swapchain,
+                                  std::numeric_limits<uint64_t>::max(),
+                                  m_image_available_semaphore,
+                                  VK_NULL_HANDLE, &image_index);
+
+            VkSubmitInfo si;
+            si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            si.pNext = nullptr;
+
+            VkSemaphore wait_semaphores[] = { m_image_available_semaphore };
+            VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+            si.waitSemaphoreCount = 1;
+            si.pWaitSemaphores = wait_semaphores;
+            si.pWaitDstStageMask = wait_stages;
+
+            si.commandBufferCount = 1;
+            si.pCommandBuffers = &command_buffers[image_index];
+
+            VkSemaphore signal_semaphores[] = { m_render_finished_semaphore };
+            si.signalSemaphoreCount = 1;
+            si.pSignalSemaphores = signal_semaphores;
+
+            VkResult rslt = vkQueueSubmit(graphics_queue, 1, &si, VK_NULL_HANDLE);
+            if (rslt != VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(error) << "Error submitting draw command buffer: " << rslt;
+            }            
         }
     }
 }

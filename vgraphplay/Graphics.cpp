@@ -605,7 +605,7 @@ namespace vgraphplay {
             }
 
             std::ifstream bytecode_file(bytecode_path.string(), std::ios::ate | std::ios::binary);
-            std::ifstream::streamoff bytecode_size = bytecode_file.tellg();
+            std::streampos bytecode_size = bytecode_file.tellg();
             std::vector<char> bytecode(static_cast<unsigned int>(bytecode_size));
             bytecode_file.seekg(0);
             bytecode_file.read(bytecode.data(), bytecode_size);
@@ -1028,6 +1028,7 @@ namespace vgraphplay {
             VkSwapchainKHR swapchain = presentation().swapchain();
             std::vector<VkCommandBuffer> &command_buffers = commandStore().commandBuffers();
             VkQueue &graphics_queue = queues().graphicsQueue();
+            VkQueue &present_queue = queues().presentQueue();
 
             uint32_t image_index;
             vkAcquireNextImageKHR(device(), swapchain,
@@ -1055,7 +1056,22 @@ namespace vgraphplay {
             VkResult rslt = vkQueueSubmit(graphics_queue, 1, &si, VK_NULL_HANDLE);
             if (rslt != VK_SUCCESS) {
                 BOOST_LOG_TRIVIAL(error) << "Error submitting draw command buffer: " << rslt;
-            }            
+            }
+
+            VkPresentInfoKHR pi;
+            pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            pi.pNext = nullptr;
+            pi.waitSemaphoreCount = 1;
+            pi.pWaitSemaphores = signal_semaphores;
+            pi.swapchainCount = 1;
+            pi.pSwapchains = &swapchain;
+            pi.pImageIndices = &image_index;
+            pi.pResults = nullptr;
+
+            rslt = vkQueuePresentKHR(present_queue, &pi);
+            if (rslt != VK_SUCCESS) {
+                BOOST_LOG_TRIVIAL(error) << "Error submitting swapchain update: " << rslt;
+            }
         }
     }
 }

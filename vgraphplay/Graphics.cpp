@@ -73,8 +73,8 @@ namespace vgraphplay {
                 return false;
             }
 
-            uint32_t num_buffers = m_parent->pipeline().swapchainFramebuffers().size();
-            m_buffers.resize(num_buffers);
+            uint32_t num_buffers = (uint32_t)m_parent->pipeline().swapchainFramebuffers().size();
+            m_buffers.resize((size_t)num_buffers);
 
             VkCommandBufferAllocateInfo cb_ai;
             cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -179,12 +179,12 @@ namespace vgraphplay {
             device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
             device_ci.pNext = nullptr;
             device_ci.flags = 0;
-            device_ci.queueCreateInfoCount = queue_cis.size();
+            device_ci.queueCreateInfoCount = (uint32_t)queue_cis.size();
             device_ci.pQueueCreateInfos = queue_cis.data();
             device_ci.enabledLayerCount = 0;
             device_ci.ppEnabledLayerNames = nullptr;
             device_ci.pEnabledFeatures = nullptr;
-            device_ci.enabledExtensionCount = extension_names.size();
+            device_ci.enabledExtensionCount = (uint32_t)extension_names.size();
             device_ci.ppEnabledExtensionNames = extension_names.data();
 
             VkResult rslt = vkCreateDevice(m_physical_device, &device_ci, nullptr, &m_device);
@@ -476,6 +476,7 @@ namespace vgraphplay {
             rp_ci.pSubpasses = &subpass;
 
             VkSubpassDependency sd;
+            sd.dependencyFlags = 0;
             sd.srcSubpass = VK_SUBPASS_EXTERNAL;
             sd.dstSubpass = 0;
             sd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -708,7 +709,7 @@ namespace vgraphplay {
                 swapchain_ci.imageArrayLayers = 1;
                 swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
                 swapchain_ci.imageSharingMode = sharing_mode;
-                swapchain_ci.queueFamilyIndexCount = queue_families.size();
+                swapchain_ci.queueFamilyIndexCount = (uint32_t)queue_families.size();
                 swapchain_ci.pQueueFamilyIndices = queue_families.data();
                 swapchain_ci.preTransform = surf_caps.currentTransform;
                 swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -843,18 +844,6 @@ namespace vgraphplay {
             return m_parent->surface();
         }
 
-        VkExtent2D& Presentation::swapchainExtent() {
-            return m_extent;
-        }
-
-        VkSurfaceFormatKHR& Presentation::swapchainFormat() {
-            return m_format;
-        }
-
-        std::vector<VkImageView>& Presentation::swapchainImageViews() {
-            return m_swapchain_image_views;
-        }
-
         CommandQueues& Presentation::queues() {
             return m_parent->queues();
         }
@@ -894,7 +883,7 @@ namespace vgraphplay {
                 inst_ci.pNext = nullptr;
                 inst_ci.flags = 0;
                 inst_ci.pApplicationInfo = nullptr;
-                inst_ci.enabledLayerCount = layer_names.size();
+                inst_ci.enabledLayerCount = (uint32_t)layer_names.size();
                 inst_ci.ppEnabledLayerNames = layer_names.data();
                 inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
                 inst_ci.ppEnabledExtensionNames = extension_names.data();

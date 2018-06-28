@@ -9,3 +9,4 @@
 /msvc/.vs
 *.suo
 gmon.out
+/.vscode

@@ -170,9 +170,9 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
-            VkDevice& device();
-
             VkShaderModule createShaderModule(const char *filename);
+            
+            VkDevice& device();
             inline VkRenderPass& renderPass() { return m_render_pass; }
             inline VkPipeline& pipeline() { return m_pipeline; }
 
@@ -206,9 +206,9 @@ namespace vgraphplay {
             VkPhysicalDevice& physicalDevice();
             VkSurfaceKHR& surface();
             inline VkSwapchainKHR& swapchain() { return m_swapchain; }
-            VkExtent2D& swapchainExtent();
-            VkSurfaceFormatKHR& swapchainFormat();
-            std::vector<VkImageView>& swapchainImageViews();
+            inline VkExtent2D& swapchainExtent() { return m_extent; }
+            inline VkSurfaceFormatKHR& swapchainFormat() { return m_format; }
+            inline std::vector<VkImageView>& swapchainImageViews() { return m_swapchain_image_views; }
 
             CommandQueues& queues();
 

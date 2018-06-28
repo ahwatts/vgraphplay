@@ -41,6 +41,8 @@ int main(int argc, char **argv) {
         GFX->drawFrame();
     }
 
+    vkDeviceWaitIdle(GFX->device());
+
     delete GFX.release();
     glfwTerminate();
     return 0;

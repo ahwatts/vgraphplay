@@ -21,6 +21,7 @@ find_package(Threads REQUIRED)
 message(STATUS "Found thread libs: " ${CMAKE_THREAD_LIBS_INIT})
 message(STATUS "Using pthreads: " ${CMAKE_USE_PTHREADS_INIT})
 
+set(Boost_USE_STATIC_LIBS "On")
 find_package(Boost REQUIRED COMPONENTS filesystem log)
 message(STATUS "Found Boost version: " ${Boost_VERSION})
 message(STATUS "Found Boost headers: " ${Boost_INCLUDE_DIRS})

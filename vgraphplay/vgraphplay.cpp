@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     AssetFinder finder(bin_path);
 
     GFX.reset(new gfx::System(window, finder));
-    GFX->initialize();
+    GFX->initialize(true);
     GFX->recordCommands();
 
     while (!glfwWindowShouldClose(window)) {

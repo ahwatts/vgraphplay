@@ -260,7 +260,7 @@ namespace vgraphplay {
             System(GLFWwindow *window, const AssetFinder &asset_finder);
             ~System();
 
-            bool initialize();
+            bool initialize(bool debug);
             void dispose();
 
             bool recordCommands();

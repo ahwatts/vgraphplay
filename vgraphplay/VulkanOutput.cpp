@@ -16,7 +16,7 @@ namespace vgraphplay {
 
         for (const auto& extension : extensions) {
             std::ostringstream msg;
-            msg << "Extension: " << extension;
+            msg << "Global Instance Extension: " << extension;
             BOOST_LOG_TRIVIAL(trace) << msg.str();
         }
     }
@@ -30,7 +30,7 @@ namespace vgraphplay {
         for (const auto& layer : layers) {
             std::ostringstream msg;
             
-            msg << "Layer: " << layer;
+            msg << "Instance Layer: " << layer;
 
             uint32_t num_extensions;
             vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
@@ -38,7 +38,7 @@ namespace vgraphplay {
             vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
 
             for (const auto& extension : extensions) {
-                msg << std::endl << "  Extension: " << extension;
+                msg << std::endl << "  Instance Layer Extension: " << extension;
             }
 
             BOOST_LOG_TRIVIAL(trace) << msg.str();
@@ -65,7 +65,7 @@ namespace vgraphplay {
             vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, extensions.data());
 
             for (auto&& extension : extensions) {
-                msg << std::endl << "  Extension: " << extension;
+                msg << std::endl << "  Device Extension: " << extension;
             }
 
             VkPhysicalDeviceMemoryProperties mem_props;

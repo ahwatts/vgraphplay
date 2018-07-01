@@ -862,12 +862,15 @@ namespace vgraphplay {
             dispose();
         }
 
-        bool System::initialize() {
+        bool System::initialize(bool debug) {
             if (m_instance == VK_NULL_HANDLE) {
                 logGlobalExtensions();
                 logGlobalLayers();
 
+                // The list of extensions we need.
                 std::vector<const char*> extension_names;
+
+                // Add the extensions GLFW wants to the list.
                 uint32_t glfw_extension_count;
                 const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
                 for (unsigned int i = 0; i < glfw_extension_count; ++i) {
@@ -875,8 +878,57 @@ namespace vgraphplay {
                     extension_names.emplace_back(glfw_extensions[i]);
                 }
 
+                // Make sure we have the extensions we need.
+                uint32_t num_extensions;
+                vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
+                std::vector<VkExtensionProperties> instance_extensions{num_extensions};
+                vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, instance_extensions.data());
+                for (unsigned int i = 0; i < extension_names.size(); ++i) {
+                    bool found = false;
+                    std::string wanted_extension_name{extension_names[i]};
+                    for (unsigned int j = 0; j < instance_extensions.size(); ++j) {
+                        std::string extension_name{instance_extensions[j].extensionName};
+                        if (wanted_extension_name == extension_name) {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        BOOST_LOG_TRIVIAL(error) << "Unable to find extension " << extension_names[i] << ". Cannot continue.";
+                        return false;
+                    }
+                }
+
+                // The layers we need.
                 std::vector<const char*> layer_names;
-                layer_names.emplace_back("VK_LAYER_LUNARG_standard_validation");
+
+                // Add the standard validation layers if we're running in debug mode.
+                if (debug) {
+                    layer_names.emplace_back("VK_LAYER_LUNARG_standard_validation");
+                }
+
+                // Make sure we have the layers we need.
+                uint32_t num_layers;
+                vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
+                std::vector<VkLayerProperties> instance_layers{num_layers};
+                vkEnumerateInstanceLayerProperties(&num_layers, instance_layers.data());
+                for (unsigned int i = 0; i < layer_names.size(); ++i) {
+                    bool found = false;
+                    std::string wanted_layer_name{layer_names[i]};
+                    for (unsigned int j = 0; j < instance_layers.size(); ++j) {
+                        std::string layer_name{instance_layers[j].layerName};
+                        if (wanted_layer_name == layer_name) {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        BOOST_LOG_TRIVIAL(error) << "Unable to find layer " << layer_names[i] << ". Cannot continue.";
+                        return false;
+                    }
+                }
 
                 VkInstanceCreateInfo inst_ci;
                 inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;

@@ -1,5 +1,6 @@
 add_executable(vgraphplay
   Graphics.cpp
+  VulkanExt.cpp
   VulkanOutput.cpp
   vgraphplay.cpp)
 

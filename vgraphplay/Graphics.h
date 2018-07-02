@@ -282,6 +282,7 @@ namespace vgraphplay {
             GLFWwindow *m_window;
             AssetFinder m_asset_finder;
             VkInstance m_instance;
+            VkDebugReportCallbackEXT m_callback;
             VkSurfaceKHR m_surface;
             Device m_device;
             VkSemaphore m_image_available_semaphore;

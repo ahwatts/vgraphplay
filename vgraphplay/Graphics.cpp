@@ -848,10 +848,38 @@ namespace vgraphplay {
             return m_parent->queues();
         }
 
+        static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+            VkDebugReportFlagsEXT flags,
+            VkDebugReportObjectTypeEXT object_type,
+            uint64_t object,
+            size_t location,
+            int32_t code,
+            const char *layer_prefix,
+            const char *message,
+            void *user_data
+        ) {
+            if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
+                BOOST_LOG_TRIVIAL(error) << "Vulkan error: " << message;
+            } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
+                BOOST_LOG_TRIVIAL(warning) << "Vulkan warning: " << message;
+            } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
+                BOOST_LOG_TRIVIAL(warning) << "Vulkan performance warning: " << message;
+            } else if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
+                BOOST_LOG_TRIVIAL(info) << "Vulkan info: " << message;
+            } else if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
+                BOOST_LOG_TRIVIAL(debug) << "Vulkan debug: " << message;
+            } else {
+                BOOST_LOG_TRIVIAL(warning) << "Vulkan unknown level: " << message;
+            }
+
+            return VK_FALSE;
+        }
+
         System::System(GLFWwindow *window, const AssetFinder &asset_finder)
             : m_window{window},
               m_asset_finder{asset_finder},
               m_instance{VK_NULL_HANDLE},
+              m_callback{VK_NULL_HANDLE},
               m_surface{VK_NULL_HANDLE},
               m_device{this},
               m_image_available_semaphore{VK_NULL_HANDLE},
@@ -876,6 +904,11 @@ namespace vgraphplay {
                 for (unsigned int i = 0; i < glfw_extension_count; ++i) {
                     BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
                     extension_names.emplace_back(glfw_extensions[i]);
+                }
+
+                // Add the debug report extension if we're running in debug mode.
+                if (debug) {
+                    extension_names.emplace_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
                 }
 
                 // Make sure we have the extensions we need.
@@ -949,6 +982,27 @@ namespace vgraphplay {
                 }
             }
 
+            if (m_callback == VK_NULL_HANDLE) {
+                VkDebugReportCallbackCreateInfoEXT drc_ci;
+                drc_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+                drc_ci.pNext = nullptr;
+                drc_ci.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+                    VK_DEBUG_REPORT_WARNING_BIT_EXT |
+                    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+                    VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+                    VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+                drc_ci.pfnCallback = debugCallback;
+                drc_ci.pUserData = nullptr;
+
+                VkResult rslt = vkCreateDebugReportCallbackEXT(instance(), &drc_ci, nullptr, &m_callback);
+                if (rslt == VK_SUCCESS) {
+                    BOOST_LOG_TRIVIAL(trace) << "Debug report callback created: " << m_callback;
+                } else {
+                    BOOST_LOG_TRIVIAL(error) << "Error creating debug report callback: " << rslt;
+                    return false;
+                }
+            }
+
             if (m_surface == VK_NULL_HANDLE) {
                 VkResult rslt = glfwCreateWindowSurface(instance(), window(), nullptr, &m_surface);
                 if (rslt == VK_SUCCESS) {
@@ -1004,6 +1058,12 @@ namespace vgraphplay {
                 BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
                 vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
                 m_surface = VK_NULL_HANDLE;
+            }
+
+            if (m_instance != VK_NULL_HANDLE && m_callback != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying debug report callback: " << m_callback;
+                vkDestroyDebugReportCallbackEXT(m_instance, m_callback, nullptr);
+                m_callback = VK_NULL_HANDLE;
             }
 
             if (m_instance != VK_NULL_HANDLE) {

@@ -982,11 +982,12 @@ namespace vgraphplay {
                 }
             }
 
-            if (m_callback == VK_NULL_HANDLE) {
+            if (m_callback == VK_NULL_HANDLE && debug) {
                 VkDebugReportCallbackCreateInfoEXT drc_ci;
                 drc_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
                 drc_ci.pNext = nullptr;
-                drc_ci.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+                drc_ci.flags =
+                    VK_DEBUG_REPORT_ERROR_BIT_EXT |
                     VK_DEBUG_REPORT_WARNING_BIT_EXT |
                     VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
                     VK_DEBUG_REPORT_INFORMATION_BIT_EXT |

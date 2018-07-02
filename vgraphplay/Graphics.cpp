@@ -859,17 +859,17 @@ namespace vgraphplay {
             void *user_data
         ) {
             if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-                BOOST_LOG_TRIVIAL(error) << "Vulkan error: " << message;
+                BOOST_LOG_TRIVIAL(error) << "Vulkan error: " << layer_prefix << ": " << message;
             } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-                BOOST_LOG_TRIVIAL(warning) << "Vulkan warning: " << message;
+                BOOST_LOG_TRIVIAL(warning) << "Vulkan warning: " << layer_prefix << ": " << message;
             } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-                BOOST_LOG_TRIVIAL(warning) << "Vulkan performance warning: " << message;
+                BOOST_LOG_TRIVIAL(warning) << "Vulkan performance warning: " << layer_prefix << ": " << message;
             } else if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-                BOOST_LOG_TRIVIAL(info) << "Vulkan info: " << message;
+                BOOST_LOG_TRIVIAL(info) << "Vulkan info: " << layer_prefix << ": " << message;
             } else if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-                BOOST_LOG_TRIVIAL(debug) << "Vulkan debug: " << message;
+                BOOST_LOG_TRIVIAL(debug) << "Vulkan debug: " << layer_prefix << ": " << message;
             } else {
-                BOOST_LOG_TRIVIAL(warning) << "Vulkan unknown level: " << message;
+                BOOST_LOG_TRIVIAL(warning) << "Vulkan unknown level: " << layer_prefix << ": " << message;
             }
 
             return VK_FALSE;

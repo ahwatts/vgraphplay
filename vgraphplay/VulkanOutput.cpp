@@ -9,28 +9,34 @@
 
 namespace vgraphplay {
     void logGlobalExtensions() {
+        std::ostringstream msg;
+
         uint32_t num_extensions;
         vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
         std::vector<VkExtensionProperties> extensions(num_extensions);
         vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, extensions.data());
 
+        msg << "There are " << num_extensions << " Global Instance Extensions";
+        
         for (const auto& extension : extensions) {
-            std::ostringstream msg;
-            msg << "Global Instance Extension: " << extension;
-            BOOST_LOG_TRIVIAL(trace) << msg.str();
+            msg << std::endl << "  Global Instance Extension: " << extension;
         }
+
+        BOOST_LOG_TRIVIAL(trace) << msg.str();
     }
 
     void logGlobalLayers() {
+        std::ostringstream msg;
+
         uint32_t num_layers;
         vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
         std::vector<VkLayerProperties> layers(num_layers);
         vkEnumerateInstanceLayerProperties(&num_layers, layers.data());
 
+        msg << "There are " << num_layers << " Instance Layers";
+
         for (const auto& layer : layers) {
-            std::ostringstream msg;
-            
-            msg << "Instance Layer: " << layer;
+            msg << std::endl << "  Instance Layer: " << layer;
 
             uint32_t num_extensions;
             vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
@@ -38,26 +44,28 @@ namespace vgraphplay {
             vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
 
             for (const auto& extension : extensions) {
-                msg << std::endl << "  Instance Layer Extension: " << extension;
+                msg << std::endl << "    Instance Layer Extension: " << extension;
             }
-
-            BOOST_LOG_TRIVIAL(trace) << msg.str();
         }
+
+        BOOST_LOG_TRIVIAL(trace) << msg.str();
     }
 
     void logPhysicalDevices(VkInstance instance) {
+        std::ostringstream msg;
+        
         uint32_t num_devices = 0;
         vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
         std::vector<VkPhysicalDevice> devices(num_devices);
         vkEnumeratePhysicalDevices(instance, &num_devices, devices.data());
 
-        for (const auto& device : devices) {
-            std::ostringstream msg;
+        msg << "There are " << num_devices << " Physical Device(s)";
 
+        for (const auto& device : devices) {
             VkPhysicalDeviceProperties props;
             vkGetPhysicalDeviceProperties(device, &props);
 
-            msg << "Physical device: (" << device << ") " << props;
+            msg << std::endl << "  Physical device: (" << device << ") " << props;
 
             uint32_t num_extensions;
             vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
@@ -65,18 +73,18 @@ namespace vgraphplay {
             vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, extensions.data());
 
             for (auto&& extension : extensions) {
-                msg << std::endl << "  Device Extension: " << extension;
+                msg << std::endl << "    Device Extension: " << extension;
             }
 
             VkPhysicalDeviceMemoryProperties mem_props;
             vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
 
             for (unsigned int i = 0; i < mem_props.memoryHeapCount; ++i) {
-                msg << std::endl << "  Memory heap " << i << ": " << mem_props.memoryHeaps[i];
+                msg << std::endl << "    Memory heap " << i << ": " << mem_props.memoryHeaps[i];
             }
 
             for (unsigned int i = 0; i < mem_props.memoryTypeCount; ++i) {
-                msg << std::endl << "  Memory type " << i << ": " << mem_props.memoryTypes[i];
+                msg << std::endl << "    Memory type " << i << ": " << mem_props.memoryTypes[i];
             }
 
             uint32_t num_queue_families = 0;
@@ -85,14 +93,14 @@ namespace vgraphplay {
             vkGetPhysicalDeviceQueueFamilyProperties(device, &num_queue_families, queue_families.data());
 
             for (unsigned int i = 0; i < queue_families.size(); ++i) {
-                msg << std::endl << "  Queue family " << i << ": " << queue_families[i];
+                msg << std::endl << "    Queue family " << i << ": " << queue_families[i];
 
                 int supports_present = glfwGetPhysicalDevicePresentationSupport(instance, device, i);
                 msg << " Can present: " << (supports_present == GLFW_TRUE);
             }
-
-            BOOST_LOG_TRIVIAL(trace) << msg.str();
         }
+
+        BOOST_LOG_TRIVIAL(trace) << msg.str();
     }
 
     void logSurfaceCapabilities(VkPhysicalDevice device, VkSurfaceKHR surface) {

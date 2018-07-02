@@ -4,8 +4,7 @@ add_executable(vgraphplay
   vgraphplay.cpp)
 
 target_link_libraries(vgraphplay
-  Boost::filesystem
   Boost::log
-  ${Vulkan_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
+  Boost::filesystem
+  Vulkan::Vulkan
   glfw)

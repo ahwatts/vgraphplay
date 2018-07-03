@@ -28,6 +28,61 @@ bool vgraphplay::gfx::Pipeline::initialize() {
     Presentation &presentation = m_parent->presentation();
     VkDevice &dev = m_parent->device();
 
+    VkAttachmentDescription color_att;
+    color_att.flags = 0;
+    color_att.format = presentation.swapchainFormat().format;
+    color_att.samples = VK_SAMPLE_COUNT_1_BIT;
+    color_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference color_ref;
+    color_ref.attachment = 0;
+    color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass;
+    subpass.flags = 0;
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.inputAttachmentCount = 0;
+    subpass.pInputAttachments = nullptr;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_ref;
+    subpass.pResolveAttachments = nullptr;
+    subpass.pDepthStencilAttachment = nullptr;
+    subpass.preserveAttachmentCount = 0;
+    subpass.pPreserveAttachments = nullptr;
+
+    VkSubpassDependency sd;
+    sd.dependencyFlags = 0;
+    sd.srcSubpass = VK_SUBPASS_EXTERNAL;
+    sd.dstSubpass = 0;
+    sd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    sd.srcAccessMask = 0;
+    sd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    sd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo rp_ci;
+    rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rp_ci.pNext = nullptr;
+    rp_ci.flags = 0;
+    rp_ci.attachmentCount = 1;
+    rp_ci.pAttachments = &color_att;
+    rp_ci.subpassCount = 1;
+    rp_ci.pSubpasses = &subpass;
+    rp_ci.dependencyCount = 1;
+    rp_ci.pDependencies = &sd;
+
+    VkResult rslt = vkCreateRenderPass(dev, &rp_ci, nullptr, &m_render_pass);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created render pass: " << m_render_pass;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating render pass: " << rslt;
+        return false;
+    }
+
     m_vertex_shader_module = createShaderModule("unlit.vert.spv");
     m_fragment_shader_module = createShaderModule("unlit.frag.spv");
     if (m_vertex_shader_module == VK_NULL_HANDLE || m_fragment_shader_module == VK_NULL_HANDLE) {
@@ -98,7 +153,7 @@ bool vgraphplay::gfx::Pipeline::initialize() {
     raster_ci.rasterizerDiscardEnable = VK_FALSE;
     raster_ci.polygonMode = VK_POLYGON_MODE_FILL;
     raster_ci.cullMode = VK_CULL_MODE_BACK_BIT;
-    raster_ci.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster_ci.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster_ci.depthBiasEnable = VK_FALSE;
     raster_ci.depthBiasConstantFactor = 0.0;
     raster_ci.depthBiasClamp = 0.0;
@@ -111,7 +166,7 @@ bool vgraphplay::gfx::Pipeline::initialize() {
     msamp_ci.flags = 0;
     msamp_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     msamp_ci.sampleShadingEnable = VK_FALSE;
-    msamp_ci.minSampleShading = 1.0;
+    msamp_ci.minSampleShading = 0.0;
     msamp_ci.pSampleMask = nullptr;
     msamp_ci.alphaToCoverageEnable = VK_FALSE;
     msamp_ci.alphaToOneEnable = VK_FALSE;
@@ -122,11 +177,11 @@ bool vgraphplay::gfx::Pipeline::initialize() {
     // depth_ci.flags = 0;
 
     VkPipelineColorBlendAttachmentState blender;
-    blender.blendEnable = VK_TRUE;
-    blender.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    blender.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blender.blendEnable = VK_FALSE;
+    blender.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blender.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     blender.colorBlendOp = VK_BLEND_OP_ADD;
-    blender.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blender.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
     blender.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
     blender.alphaBlendOp = VK_BLEND_OP_ADD;
     blender.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -158,66 +213,11 @@ bool vgraphplay::gfx::Pipeline::initialize() {
     pl_layout_ci.pushConstantRangeCount = 0;
     pl_layout_ci.pPushConstantRanges = nullptr;
 
-    VkResult rslt = vkCreatePipelineLayout(dev, &pl_layout_ci, nullptr, &m_pipeline_layout);
+    rslt = vkCreatePipelineLayout(dev, &pl_layout_ci, nullptr, &m_pipeline_layout);
     if (rslt == VK_SUCCESS) {
         BOOST_LOG_TRIVIAL(trace) << "Created pipeline layout: " << m_pipeline_layout;
     } else {
         BOOST_LOG_TRIVIAL(error) << "Error creating pipeline layout: " << rslt;
-        return false;
-    }
-
-    VkAttachmentDescription color_att;
-    color_att.flags = 0;
-    color_att.format = presentation.swapchainFormat().format;
-    color_att.samples = VK_SAMPLE_COUNT_1_BIT;
-    color_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    color_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    color_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    color_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference color_ref;
-    color_ref.attachment = 0;
-    color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass;
-    subpass.flags = 0;
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.inputAttachmentCount = 0;
-    subpass.pInputAttachments = nullptr;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &color_ref;
-    subpass.pResolveAttachments = nullptr;
-    subpass.pDepthStencilAttachment = nullptr;
-    subpass.preserveAttachmentCount = 0;
-    subpass.pPreserveAttachments = nullptr;
-
-    VkRenderPassCreateInfo rp_ci;
-    rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rp_ci.pNext = nullptr;
-    rp_ci.flags = 0;
-    rp_ci.attachmentCount = 1;
-    rp_ci.pAttachments = &color_att;
-    rp_ci.subpassCount = 1;
-    rp_ci.pSubpasses = &subpass;
-
-    VkSubpassDependency sd;
-    sd.dependencyFlags = 0;
-    sd.srcSubpass = VK_SUBPASS_EXTERNAL;
-    sd.dstSubpass = 0;
-    sd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    sd.srcAccessMask = 0;
-    sd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    sd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    rp_ci.dependencyCount = 1;
-    rp_ci.pDependencies = &sd;
-
-    rslt = vkCreateRenderPass(dev, &rp_ci, nullptr, &m_render_pass);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created render pass: " << m_render_pass;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating render pass: " << rslt;
         return false;
     }
 
@@ -253,15 +253,13 @@ bool vgraphplay::gfx::Pipeline::initialize() {
     std::vector<VkImageView> &swapchain_image_views = presentation.swapchainImageViews();
     m_swapchain_framebuffers.resize(swapchain_image_views.size());
     for (unsigned int i = 0; i < swapchain_image_views.size(); ++i) {
-        VkImageView attachments[] = { swapchain_image_views[i] };
-
         VkFramebufferCreateInfo fb_ci;
         fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fb_ci.pNext = nullptr;
         fb_ci.flags = 0;
         fb_ci.renderPass = m_render_pass;
         fb_ci.attachmentCount = 1;
-        fb_ci.pAttachments = attachments;
+        fb_ci.pAttachments = &swapchain_image_views[i];
         fb_ci.width = extent.width;
         fb_ci.height = extent.height;
         fb_ci.layers = 1;
@@ -325,12 +323,7 @@ VkShaderModule vgraphplay::gfx::Pipeline::createShaderModule(const char *filenam
     VkDevice &dev = m_parent->device();
     VkShaderModule rv = VK_NULL_HANDLE;
 
-    VkShaderModuleCreateInfo sm_ci;
-    sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    sm_ci.pNext = nullptr;
-    sm_ci.flags = 0;
-
-    path bytecode_path = asset_finder.findShader(filename);
+    boost::filesystem::path bytecode_path = asset_finder.findShader(filename);
     if (!exists(bytecode_path)) {
         BOOST_LOG_TRIVIAL(error) << "Cannot find file " << bytecode_path;
         return rv;
@@ -343,6 +336,10 @@ VkShaderModule vgraphplay::gfx::Pipeline::createShaderModule(const char *filenam
     bytecode_file.read(bytecode.data(), bytecode_size);
     bytecode_file.close();
 
+    VkShaderModuleCreateInfo sm_ci;
+    sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    sm_ci.pNext = nullptr;
+    sm_ci.flags = 0;
     sm_ci.codeSize = static_cast<size_t>(bytecode_size);
     sm_ci.pCode = reinterpret_cast<uint32_t*>(bytecode.data());
 

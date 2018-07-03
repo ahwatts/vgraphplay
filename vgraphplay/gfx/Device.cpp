@@ -1,5 +1,9 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include <boost/log/trivial.hpp>
 
 #include "../vulkan.h"
@@ -11,6 +15,14 @@
 #include "Presentation.h"
 #include "System.h"
 #include "VulkanOutput.h"
+
+struct ChosenDeviceInfo {
+    VkPhysicalDevice dev;
+    uint32_t graphics_queue_family;
+    uint32_t present_queue_family;
+};
+
+ChosenDeviceInfo choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface);
 
 vgraphplay::gfx::Device::Device(System *parent)
     : m_device{VK_NULL_HANDLE},
@@ -47,18 +59,18 @@ bool vgraphplay::gfx::Device::initialize() {
     vkEnumeratePhysicalDevices(inst, &num_devices, nullptr);
     std::vector<VkPhysicalDevice> devices(num_devices);
     vkEnumeratePhysicalDevices(inst, &num_devices, devices.data());
-    m_physical_device = choosePhysicalDevice(devices);
 
-    uint32_t num_queue_families = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, nullptr);
-    std::vector<VkQueueFamilyProperties> queue_families(num_queue_families);
-    vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &num_queue_families, queue_families.data());
-    uint32_t graphics_queue_family = chooseGraphicsQueueFamily(m_physical_device, queue_families);
-    uint32_t present_queue_family = choosePresentQueueFamily(m_physical_device, queue_families, surf);
+    ChosenDeviceInfo chosen = choosePhysicalDevice(devices, surf);
+
+    if (chosen.dev == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    m_physical_device = chosen.dev;
 
     BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device
-                                << " graphics queue family = " << graphics_queue_family
-                                << " present queue family = " << present_queue_family;
+                             << " graphics queue family = " << chosen.graphics_queue_family
+                             << " present queue family = " << chosen.present_queue_family;
 
     float queue_priority = 1.0;
     std::vector<VkDeviceQueueCreateInfo> queue_cis;
@@ -66,17 +78,17 @@ bool vgraphplay::gfx::Device::initialize() {
     queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_ci.pNext = nullptr;
     queue_ci.flags = 0;
-    queue_ci.queueFamilyIndex = graphics_queue_family;
+    queue_ci.queueFamilyIndex = chosen.graphics_queue_family;
     queue_ci.queueCount = 1;
     queue_ci.pQueuePriorities = &queue_priority;
     queue_cis.push_back(queue_ci);
 
-    if (present_queue_family != graphics_queue_family) {
+    if (chosen.present_queue_family != chosen.graphics_queue_family) {
         VkDeviceQueueCreateInfo queue_ci;
         queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queue_ci.pNext = nullptr;
         queue_ci.flags = 0;
-        queue_ci.queueFamilyIndex = present_queue_family;
+        queue_ci.queueFamilyIndex = chosen.present_queue_family;
         queue_ci.queueCount = 1;
         queue_ci.pQueuePriorities = &queue_priority;
         queue_cis.push_back(queue_ci);
@@ -106,31 +118,31 @@ bool vgraphplay::gfx::Device::initialize() {
         return false;
     }
 
-    VkSemaphoreCreateInfo sem_ci;
-    sem_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    sem_ci.pNext = nullptr;
-    sem_ci.flags = 0;
+    // VkSemaphoreCreateInfo sem_ci;
+    // sem_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    // sem_ci.pNext = nullptr;
+    // sem_ci.flags = 0;
 
-    rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_image_available_semaphore);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created image available semaphore: " << m_image_available_semaphore;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating image available semaphore: " << rslt;
-        return false;
-    }
+    // rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_image_available_semaphore);
+    // if (rslt == VK_SUCCESS) {
+    //     BOOST_LOG_TRIVIAL(trace) << "Created image available semaphore: " << m_image_available_semaphore;
+    // } else {
+    //     BOOST_LOG_TRIVIAL(error) << "Error creating image available semaphore: " << rslt;
+    //     return false;
+    // }
 
-    rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_render_finished_semaphore);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created render finished semaphore: " << m_render_finished_semaphore;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating render finished semaphore: " << rslt;
-        return false;
-    }
-    
-    return m_queues.initialize(graphics_queue_family, present_queue_family) &&
+    // rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_render_finished_semaphore);
+    // if (rslt == VK_SUCCESS) {
+    //     BOOST_LOG_TRIVIAL(trace) << "Created render finished semaphore: " << m_render_finished_semaphore;
+    // } else {
+    //     BOOST_LOG_TRIVIAL(error) << "Error creating render finished semaphore: " << rslt;
+    //     return false;
+    // }
+
+    return m_queues.initialize(chosen.graphics_queue_family, chosen.present_queue_family)&&
         m_present.initialize() &&
-        m_pipeline.initialize() &&
-        m_commands.initialize(m_queues);
+        m_pipeline.initialize();
+        // m_commands.initialize(m_queues);
 }
 
 void vgraphplay::gfx::Device::dispose() {
@@ -160,27 +172,70 @@ void vgraphplay::gfx::Device::dispose() {
     m_physical_device = VK_NULL_HANDLE;
 }
 
-VkPhysicalDevice vgraphplay::gfx::Device::choosePhysicalDevice(const std::vector<VkPhysicalDevice> &devices) {
-    // We probably want to make a better decision than this...
-    return devices[0];
-}
+ChosenDeviceInfo choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface) {
+    const uint32_t MAX_INT = std::numeric_limits<uint32_t>::max();
+    
+    for (auto &dev : devices) {
+        // Do we have queue families suitable for graphics / presentation?
+        uint32_t graphics_queue = MAX_INT, present_queue = MAX_INT, num_queue_families = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
+        std::vector<VkQueueFamilyProperties> queue_families{num_queue_families};
+        vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
 
-uint32_t vgraphplay::gfx::Device::chooseGraphicsQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families) {
-    for (uint32_t i = 0; i < families.size(); ++i) {
-        if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            return i;
+        for (uint32_t id = 0; id < queue_families.size(); ++id) {
+            if (graphics_queue == MAX_INT && queue_families[id].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                graphics_queue = id;
+            }
+
+            if (present_queue == MAX_INT) {
+                VkBool32 supports_present = false;
+                vkGetPhysicalDeviceSurfaceSupportKHR(dev, id, surface, &supports_present);
+                if (supports_present) {
+                    present_queue = id;
+                }
+            }
+        }
+
+        if (graphics_queue == MAX_INT && present_queue == MAX_INT) {
+            continue;
+        }
+
+        // Are the extensions / layers we want supported?
+        uint32_t num_extensions = 0;
+        vkEnumerateDeviceExtensionProperties(dev, nullptr, &num_extensions, nullptr);
+        std::vector<VkExtensionProperties> extensions{num_extensions};
+        vkEnumerateDeviceExtensionProperties(dev, nullptr, &num_extensions, extensions.data());
+
+        std::set<std::string> required_extensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
+        for (const auto &extension : extensions) {
+            required_extensions.erase(extension.extensionName);
+        }
+
+        if (!required_extensions.empty()) {
+            continue;
+        }
+        
+        // Are swapchains supported, and are there surface formats / present modes we can use?
+        uint32_t num_formats = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &num_formats, nullptr);
+        uint32_t num_present_modes = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &num_present_modes, nullptr);
+
+        if (num_formats > 0 && num_present_modes > 0) {
+            return {
+                dev,
+                graphics_queue,
+                present_queue,
+            };
         }
     }
-    return UINT32_MAX;
-}
 
-uint32_t vgraphplay::gfx::Device::choosePresentQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families, VkSurfaceKHR &surf) {
-    for (uint32_t i = 0; i < families.size(); ++i) {
-        VkBool32 supports_present = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surf, &supports_present);
-        if (supports_present) {
-            return i;
-        }
-    }
-    return UINT32_MAX;
+    return {
+        VK_NULL_HANDLE,
+        MAX_INT,
+        MAX_INT,
+    };
 }

@@ -29,6 +29,7 @@ namespace vgraphplay {
             inline GLFWwindow* window() { return m_window; }
             inline VkInstance& instance() { return m_instance; }
             inline VkSurfaceKHR& surface() { return m_surface; }
+            inline VkDebugReportCallbackEXT& callback() { return m_callback; }
 
             inline AssetFinder& assetFinder() { return m_asset_finder; }
             inline Device& device() { return m_device; }

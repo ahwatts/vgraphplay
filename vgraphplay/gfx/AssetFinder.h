@@ -5,8 +5,6 @@
 
 #include <boost/filesystem.hpp>
 
-using namespace boost::filesystem;
-
 namespace vgraphplay {
     namespace gfx {
         class AssetFinder {
@@ -21,8 +19,8 @@ namespace vgraphplay {
             }
 
             template <class Source>
-            path findAsset(const Source &relative_path) const {
-                path asset_path(m_base_path);
+            boost::filesystem::path findAsset(const Source &relative_path) const {
+                boost::filesystem::path asset_path(m_base_path);
                 asset_path /= relative_path;
                 if (exists(asset_path)) {
                     return canonical(asset_path);
@@ -32,15 +30,15 @@ namespace vgraphplay {
             }
 
             template <class Source>
-            path findShader(const Source &filename) const {
-                path asset_path(m_shaders_path);
+            boost::filesystem::path findShader(const Source &filename) const {
+                boost::filesystem::path asset_path(m_shaders_path);
                 asset_path /= filename;
                 return findAsset(asset_path);
             }
 
         protected:
-            path m_base_path;
-            path m_shaders_path;
+            boost::filesystem::path m_base_path;
+            boost::filesystem::path m_shaders_path;
         };
     }
 }

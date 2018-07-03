@@ -21,10 +21,6 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
-            VkPhysicalDevice choosePhysicalDevice(const std::vector<VkPhysicalDevice> &devices);
-            uint32_t chooseGraphicsQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families);
-            uint32_t choosePresentQueueFamily(VkPhysicalDevice &device, const std::vector<VkQueueFamilyProperties> &families, VkSurfaceKHR &surf);
-
             inline VkDevice& device() { return m_device; }
             inline VkPhysicalDevice& physicalDevice() { return m_physical_device; }
             inline VkSemaphore& imageAvailableSemaphore() { return m_image_available_semaphore; }

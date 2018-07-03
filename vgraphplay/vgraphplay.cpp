@@ -8,8 +8,8 @@
 
 #include "vulkan.h"
 
-#include "AssetFinder.h"
-#include "Graphics.h"
+#include "gfx/AssetFinder.h"
+#include "gfx/System.h"
 
 using namespace vgraphplay;
 using namespace boost::filesystem;
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
     path bin_path(argv[0]);
     bin_path.remove_filename();
-    AssetFinder finder(bin_path);
+    gfx::AssetFinder finder(bin_path);
 
     GFX.reset(new gfx::System(window, finder));
     GFX->initialize(true);
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         GFX->drawFrame();
     }
 
-    vkDeviceWaitIdle(GFX->device());
+    vkDeviceWaitIdle(GFX->device().device());
 
     delete GFX.release();
     glfwTerminate();

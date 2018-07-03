@@ -1,11 +1,13 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
-#include "VulkanOutput.h"
-
 #include <sstream>
 #include <vector>
 
 #include <boost/log/trivial.hpp>
+
+#include "../vulkan.h"
+
+#include "VulkanOutput.h"
 
 namespace vgraphplay {
     void logGlobalExtensions() {

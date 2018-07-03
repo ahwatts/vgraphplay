@@ -1,11 +1,11 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
-#ifndef _VGRAHPLAY_VGRAPHPLAY_VULKAN_OUTPUT_H_
-#define _VGRAHPLAY_VGRAPHPLAY_VULKAN_OUTPUT_H_
+#ifndef _VGRAHPLAY_VGRAPHPLAY_GFX_VULKAN_OUTPUT_H_
+#define _VGRAHPLAY_VGRAPHPLAY_GFX_VULKAN_OUTPUT_H_
 
 #include <string>
 
-#include "vulkan.h"
+#include "../vulkan.h"
 
 namespace vgraphplay {
     void logGlobalExtensions();

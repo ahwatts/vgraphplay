@@ -7,6 +7,12 @@ add_library(vgraphplay_engine
   gfx/VulkanExt.cpp
   gfx/VulkanOutput.cpp)
 
+target_include_directories(vgraphplay_engine
+  PRIVATE
+  ${Boost_INCLUDE_DIRS}
+  ${Vulkan_INCLUDE_DIRS}
+  ${GLFW_INCLUDE_DIRS})
+
 add_executable(vgraphplay
   vgraphplay.cpp)
 

@@ -23,15 +23,3 @@ target_link_libraries(vgraphplay
   Boost::filesystem
   Vulkan::Vulkan
   glfw)
-
-add_executable(hello_triangle
-  15_hello_triangle.cpp)
-
-target_link_libraries(hello_triangle
-  vgraphplay_engine
-  Boost::log_setup
-  Boost::log
-  Boost::filesystem
-  Vulkan::Vulkan
-  glfw)
-

@@ -118,31 +118,31 @@ bool vgraphplay::gfx::Device::initialize() {
         return false;
     }
 
-    // VkSemaphoreCreateInfo sem_ci;
-    // sem_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    // sem_ci.pNext = nullptr;
-    // sem_ci.flags = 0;
+    VkSemaphoreCreateInfo sem_ci;
+    sem_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    sem_ci.pNext = nullptr;
+    sem_ci.flags = 0;
 
-    // rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_image_available_semaphore);
-    // if (rslt == VK_SUCCESS) {
-    //     BOOST_LOG_TRIVIAL(trace) << "Created image available semaphore: " << m_image_available_semaphore;
-    // } else {
-    //     BOOST_LOG_TRIVIAL(error) << "Error creating image available semaphore: " << rslt;
-    //     return false;
-    // }
+    rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_image_available_semaphore);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created image available semaphore: " << m_image_available_semaphore;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating image available semaphore: " << rslt;
+        return false;
+    }
 
-    // rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_render_finished_semaphore);
-    // if (rslt == VK_SUCCESS) {
-    //     BOOST_LOG_TRIVIAL(trace) << "Created render finished semaphore: " << m_render_finished_semaphore;
-    // } else {
-    //     BOOST_LOG_TRIVIAL(error) << "Error creating render finished semaphore: " << rslt;
-    //     return false;
-    // }
+    rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_render_finished_semaphore);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created render finished semaphore: " << m_render_finished_semaphore;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating render finished semaphore: " << rslt;
+        return false;
+    }
 
     return m_queues.initialize(chosen.graphics_queue_family, chosen.present_queue_family)&&
         m_present.initialize() &&
-        m_pipeline.initialize();
-        // m_commands.initialize(m_queues);
+        m_pipeline.initialize() &&
+        m_commands.initialize(m_queues);
 }
 
 void vgraphplay::gfx::Device::dispose() {

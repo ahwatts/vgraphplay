@@ -57,7 +57,6 @@ bool vgraphplay::gfx::CommandStore::initialize(CommandQueues &queues) {
     cp_ci.queueFamilyIndex = queues.graphicsQueueFamily();
 
     VkResult rslt = vkCreateCommandPool(dev, &cp_ci, nullptr, &m_pool);
-
     if (rslt == VK_SUCCESS) {
         BOOST_LOG_TRIVIAL(trace) << "Created command pool: " << m_pool;
     } else {
@@ -65,15 +64,15 @@ bool vgraphplay::gfx::CommandStore::initialize(CommandQueues &queues) {
         return false;
     }
 
-    uint32_t num_buffers = (uint32_t)m_parent->pipeline().swapchainFramebuffers().size();
-    m_buffers.resize((size_t)num_buffers);
+    size_t num_buffers = m_parent->pipeline().swapchainFramebuffers().size();
+    m_buffers.resize(num_buffers);
 
     VkCommandBufferAllocateInfo cb_ai;
     cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     cb_ai.pNext = nullptr;
     cb_ai.commandPool = m_pool;
     cb_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cb_ai.commandBufferCount = num_buffers;
+    cb_ai.commandBufferCount = static_cast<uint32_t>(num_buffers);
 
     rslt = vkAllocateCommandBuffers(dev, &cb_ai, m_buffers.data());
 

@@ -7,9 +7,10 @@
 
 #include "../vulkan.h"
 
+#include "Resource.h"
+
 namespace vgraphplay {
     namespace gfx {
-        class AssetFinder;
         class Presentation;
         class Device;
 
@@ -21,7 +22,7 @@ namespace vgraphplay {
             bool initialize();
             void dispose();
 
-            VkShaderModule createShaderModule(const char *filename);
+            VkShaderModule createShaderModule(const Resource &rsrc);
             
             inline VkShaderModule& vertexShaderModule() { return m_vertex_shader_module; }
             inline VkShaderModule& fragmentShaderModule() { return m_fragment_shader_module; }

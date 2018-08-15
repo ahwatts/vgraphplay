@@ -4,11 +4,14 @@
 
 #include "../vulkan.h"
 
-#include "AssetFinder.h"
 #include "Device.h"
 #include "Pipeline.h"
 #include "Presentation.h"
 #include "System.h"
+#include "Resource.h"
+
+const Resource UNLIT_VERT_BYTECODE = LOAD_RESOURCE(unlit_vert_spv);
+const Resource UNLIT_FRAG_BYTECODE = LOAD_RESOURCE(unlit_frag_spv);
 
 vgraphplay::gfx::Pipeline::Pipeline(Device *parent)
     : m_parent{parent},
@@ -83,8 +86,8 @@ bool vgraphplay::gfx::Pipeline::initialize() {
         return false;
     }
 
-    m_vertex_shader_module = createShaderModule("unlit.vert.spv");
-    m_fragment_shader_module = createShaderModule("unlit.frag.spv");
+    m_vertex_shader_module = createShaderModule(UNLIT_VERT_BYTECODE);
+    m_fragment_shader_module = createShaderModule(UNLIT_FRAG_BYTECODE);
     if (m_vertex_shader_module == VK_NULL_HANDLE || m_fragment_shader_module == VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(trace) << "Unable to create all of the shader modules.";
         return false;
@@ -316,36 +319,20 @@ void vgraphplay::gfx::Pipeline::dispose() {
     }
 }
 
-VkShaderModule vgraphplay::gfx::Pipeline::createShaderModule(const char *filename) {
-    System &system = m_parent->parent();
-    AssetFinder &asset_finder = system.assetFinder();
-    
+VkShaderModule vgraphplay::gfx::Pipeline::createShaderModule(const Resource &rsrc) {
     VkDevice &dev = m_parent->device();
     VkShaderModule rv = VK_NULL_HANDLE;
-
-    boost::filesystem::path bytecode_path = asset_finder.findShader(filename);
-    if (!exists(bytecode_path)) {
-        BOOST_LOG_TRIVIAL(error) << "Cannot find file " << bytecode_path;
-        return rv;
-    }
-
-    std::ifstream bytecode_file(bytecode_path.string(), std::ios::ate | std::ios::binary);
-    std::streampos bytecode_size = bytecode_file.tellg();
-    std::vector<char> bytecode(static_cast<unsigned int>(bytecode_size));
-    bytecode_file.seekg(0);
-    bytecode_file.read(bytecode.data(), bytecode_size);
-    bytecode_file.close();
 
     VkShaderModuleCreateInfo sm_ci;
     sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     sm_ci.pNext = nullptr;
     sm_ci.flags = 0;
-    sm_ci.codeSize = static_cast<size_t>(bytecode_size);
-    sm_ci.pCode = reinterpret_cast<uint32_t*>(bytecode.data());
+    sm_ci.codeSize = rsrc.size();
+    sm_ci.pCode = reinterpret_cast<const uint32_t*>(rsrc.data());
 
     VkResult rslt = vkCreateShaderModule(dev, &sm_ci, nullptr, &rv);
     if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created shader module for " << filename << ": " << rv;
+        BOOST_LOG_TRIVIAL(trace) << "Created shader module";
     } else {
         BOOST_LOG_TRIVIAL(trace) << "Failed to create shader module: " << rslt;
     }

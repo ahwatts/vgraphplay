@@ -5,7 +5,6 @@
 
 #include "../vulkan.h"
 
-#include "AssetFinder.h"
 #include "Device.h"
 
 namespace vgraphplay {
@@ -17,7 +16,7 @@ namespace vgraphplay {
         
         class System {
         public:
-            System(GLFWwindow *window, const AssetFinder &asset_finder);
+            System(GLFWwindow *window);
             ~System();
 
             bool initialize(bool debug);
@@ -31,7 +30,6 @@ namespace vgraphplay {
             inline VkSurfaceKHR& surface() { return m_surface; }
             inline VkDebugReportCallbackEXT& callback() { return m_callback; }
 
-            inline AssetFinder& assetFinder() { return m_asset_finder; }
             inline Device& device() { return m_device; }
 
         protected:
@@ -40,7 +38,6 @@ namespace vgraphplay {
             VkDebugReportCallbackEXT m_callback;
             VkSurfaceKHR m_surface;
             
-            AssetFinder m_asset_finder;
             Device m_device;
         };
     }

@@ -8,7 +8,6 @@
 
 #include "../vulkan.h"
 
-#include "AssetFinder.h"
 #include "Commands.h"
 #include "Device.h"
 #include "Pipeline.h"

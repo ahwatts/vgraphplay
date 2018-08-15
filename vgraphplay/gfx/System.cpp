@@ -4,7 +4,6 @@
 
 #include "../vulkan.h"
 
-#include "AssetFinder.h"
 #include "System.h"
 #include "VulkanOutput.h"
 
@@ -35,12 +34,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-vgraphplay::gfx::System::System(GLFWwindow *window, const vgraphplay::gfx::AssetFinder &asset_finder)
+vgraphplay::gfx::System::System(GLFWwindow *window)
     : m_window{window},
       m_instance{VK_NULL_HANDLE},
       m_callback{VK_NULL_HANDLE},
       m_surface{VK_NULL_HANDLE},
-      m_asset_finder{asset_finder},
       m_device{this}
 {}
 

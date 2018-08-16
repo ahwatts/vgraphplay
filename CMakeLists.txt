@@ -46,6 +46,7 @@ compile_spirv(SPIRV_SHADERS
 embed_resources(EMBEDDED_SHADERS ${SPIRV_SHADERS})
 
 add_executable(vgraphplay
+  vgraphplay/Application.cpp
   vgraphplay/gfx/Commands.cpp
   vgraphplay/gfx/Device.cpp
   vgraphplay/gfx/Pipeline.cpp

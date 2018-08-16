@@ -7,7 +7,7 @@
 
 #include "vulkan.h"
 
-#include "gfx/System.h"
+#include "Application.h"
 
 using namespace vgraphplay;
 
@@ -15,9 +15,6 @@ void initGLFW(int width, int height, const char *title, GLFWwindow **window);
 void handleGLFWError(int code, const char *desc);
 void bailout(const std::string &msg);
 
-void keypress(GLFWwindow *wnd, int key, int scancode, int action, int mods);
-
-static std::unique_ptr<gfx::System> GFX{nullptr};
 const int WIDTH = 1024;
 const int HEIGHT = 768;
 
@@ -25,18 +22,11 @@ int main(int argc, char **argv) {
     GLFWwindow *window;
     initGLFW(WIDTH, HEIGHT, "VGraphplay", &window);
 
-    GFX.reset(new gfx::System(window));
-    GFX->initialize(true);
-    GFX->recordCommands();
+    Application app{window};
+    app.initialize(true);
+    app.run();
+    app.dispose();
 
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        GFX->drawFrame();
-    }
-
-    vkDeviceWaitIdle(GFX->device().device());
-
-    delete GFX.release();
     glfwTerminate();
     return 0;
 }
@@ -50,8 +40,6 @@ void initGLFW(int width, int height, const char *title, GLFWwindow **window) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     *window = glfwCreateWindow(width, height, title, nullptr, nullptr);
-
-    glfwSetKeyCallback(*window, keypress);
 
     if (!*window) {
         bailout("Could not create window");
@@ -67,20 +55,4 @@ void bailout(const std::string &msg) {
     std::cerr << msg << std::endl;
     glfwTerminate();
     std::exit(1);
-}
-
-void keypress(GLFWwindow *wnd, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS) {
-        switch (key) {
-        case GLFW_KEY_ESCAPE:
-            glfwSetWindowShouldClose(wnd, true);
-            break;
-        default:
-            std::cout << "key: " << key
-                      << " scancode: " << scancode
-                      << " action: " << action
-                      << " mods: " << mods
-                      << std::endl;
-        }
-    }
 }

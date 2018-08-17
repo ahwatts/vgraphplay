@@ -1,5 +1,8 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
+#include <set>
+#include <vector>
+
 #include <boost/log/trivial.hpp>
 
 #include "../vulkan.h"
@@ -73,40 +76,10 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
         rv = rv && initDebugCallback();
     }
 
+    rv = rv && initSurface();
+    rv = rv && initDevice();
+
     return rv;
-    // if (m_callback == VK_NULL_HANDLE && debug) {
-    //     VkDebugReportCallbackCreateInfoEXT drc_ci;
-    //     drc_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    //     drc_ci.pNext = nullptr;
-    //     drc_ci.flags =
-    //         VK_DEBUG_REPORT_ERROR_BIT_EXT |
-    //         VK_DEBUG_REPORT_WARNING_BIT_EXT |
-    //         VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-    //         VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-    //         VK_DEBUG_REPORT_DEBUG_BIT_EXT;
-    //     drc_ci.pfnCallback = debugCallback;
-    //     drc_ci.pUserData = nullptr;
-
-    //     VkResult rslt = vkCreateDebugReportCallbackEXT(instance(), &drc_ci, nullptr, &m_callback);
-    //     if (rslt == VK_SUCCESS) {
-    //         BOOST_LOG_TRIVIAL(trace) << "Debug report callback created: " << m_callback;
-    //     } else {
-    //         BOOST_LOG_TRIVIAL(error) << "Error creating debug report callback: " << rslt;
-    //         return false;
-    //     }
-    // }
-
-    // if (m_surface == VK_NULL_HANDLE) {
-    //     VkResult rslt = glfwCreateWindowSurface(instance(), window(), nullptr, &m_surface);
-    //     if (rslt == VK_SUCCESS) {
-    //         BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
-    //     } else {
-    //         BOOST_LOG_TRIVIAL(error) << "Error creating surface: " << rslt;
-    //         return false;
-    //     }
-    // }
-
-    // return m_device.initialize();
 }
 
 void vgraphplay::gfx::System::dispose() {
@@ -114,111 +87,106 @@ void vgraphplay::gfx::System::dispose() {
         vkDeviceWaitIdle(m_device);
     }
 
+    cleanupDevice();
+    cleanupSurface();
     cleanupDebugCallback();
     cleanupInstance();
-
-    // m_device.dispose();
-
-    // if (m_instance != VK_NULL_HANDLE && m_surface != VK_NULL_HANDLE) {
-    //     BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
-    //     vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-    //     m_surface = VK_NULL_HANDLE;
-    // }
 }
 
 bool vgraphplay::gfx::System::initInstance(bool debug) {
-    if (m_instance == VK_NULL_HANDLE) {
-        logGlobalExtensions();
-        logGlobalLayers();
+    if (m_instance != VK_NULL_HANDLE) {
+        return true;
+    }
 
-        // The list of extensions we need.
-        std::vector<const char*> extension_names;
+    logGlobalExtensions();
+    logGlobalLayers();
 
-        // Add the extensions GLFW wants to the list.
-        uint32_t glfw_extension_count;
-        const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-        for (unsigned int i = 0; i < glfw_extension_count; ++i) {
-            BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
-            extension_names.emplace_back(glfw_extensions[i]);
-        }
+    // The list of extensions we need.
+    std::vector<const char*> extension_names;
 
-        // Add the debug report extension if we're running in debug mode.
-        if (debug) {
-            extension_names.emplace_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        }
+    // Add the extensions GLFW wants to the list.
+    uint32_t glfw_extension_count;
+    const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    for (unsigned int i = 0; i < glfw_extension_count; ++i) {
+        BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
+        extension_names.emplace_back(glfw_extensions[i]);
+    }
 
-        // Make sure we have the extensions we need.
-        uint32_t num_extensions;
-        vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
-        std::vector<VkExtensionProperties> instance_extensions{num_extensions};
-        vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, instance_extensions.data());
-        for (unsigned int i = 0; i < extension_names.size(); ++i) {
-            bool found = false;
-            std::string wanted_extension_name{extension_names[i]};
-            for (unsigned int j = 0; j < instance_extensions.size(); ++j) {
-                std::string extension_name{instance_extensions[j].extensionName};
-                if (wanted_extension_name == extension_name) {
-                    found = true;
-                    break;
-                }
-            }
+    // Add the debug report extension if we're running in debug mode.
+    if (debug) {
+        extension_names.emplace_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+    }
 
-            if (!found) {
-                BOOST_LOG_TRIVIAL(error) << "Unable to find extension " << extension_names[i] << ". Cannot continue.";
-                return false;
+    // Make sure we have the extensions we need.
+    uint32_t num_extensions;
+    vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
+    std::vector<VkExtensionProperties> instance_extensions{num_extensions};
+    vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, instance_extensions.data());
+    for (unsigned int i = 0; i < extension_names.size(); ++i) {
+        bool found = false;
+        std::string wanted_extension_name{extension_names[i]};
+        for (unsigned int j = 0; j < instance_extensions.size(); ++j) {
+            std::string extension_name{instance_extensions[j].extensionName};
+            if (wanted_extension_name == extension_name) {
+                found = true;
+                break;
             }
         }
 
-        // The layers we need.
-        std::vector<const char*> layer_names;
-
-        // Add the standard validation layers if we're running in debug mode.
-        if (debug) {
-            layer_names.emplace_back("VK_LAYER_LUNARG_standard_validation");
-        }
-
-        // Make sure we have the layers we need.
-        uint32_t num_layers;
-        vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
-        std::vector<VkLayerProperties> instance_layers{num_layers};
-        vkEnumerateInstanceLayerProperties(&num_layers, instance_layers.data());
-        for (unsigned int i = 0; i < layer_names.size(); ++i) {
-            bool found = false;
-            std::string wanted_layer_name{layer_names[i]};
-            for (unsigned int j = 0; j < instance_layers.size(); ++j) {
-                std::string layer_name{instance_layers[j].layerName};
-                if (wanted_layer_name == layer_name) {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                BOOST_LOG_TRIVIAL(error) << "Unable to find layer " << layer_names[i] << ". Cannot continue.";
-                return false;
-            }
-        }
-
-        VkInstanceCreateInfo inst_ci;
-        inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        inst_ci.pNext = nullptr;
-        inst_ci.flags = 0;
-        inst_ci.pApplicationInfo = nullptr;
-        inst_ci.enabledLayerCount = (uint32_t)layer_names.size();
-        inst_ci.ppEnabledLayerNames = layer_names.data();
-        inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
-        inst_ci.ppEnabledExtensionNames = extension_names.data();
-
-        VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
+        if (!found) {
+            BOOST_LOG_TRIVIAL(error) << "Unable to find extension " << extension_names[i] << ". Cannot continue.";
             return false;
         }
     }
 
-    return true;
+    // The layers we need.
+    std::vector<const char*> layer_names;
+
+    // Add the standard validation layers if we're running in debug mode.
+    if (debug) {
+        layer_names.emplace_back("VK_LAYER_LUNARG_standard_validation");
+    }
+
+    // Make sure we have the layers we need.
+    uint32_t num_layers;
+    vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
+    std::vector<VkLayerProperties> instance_layers{num_layers};
+    vkEnumerateInstanceLayerProperties(&num_layers, instance_layers.data());
+    for (unsigned int i = 0; i < layer_names.size(); ++i) {
+        bool found = false;
+        std::string wanted_layer_name{layer_names[i]};
+        for (unsigned int j = 0; j < instance_layers.size(); ++j) {
+            std::string layer_name{instance_layers[j].layerName};
+            if (wanted_layer_name == layer_name) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            BOOST_LOG_TRIVIAL(error) << "Unable to find layer " << layer_names[i] << ". Cannot continue.";
+            return false;
+        }
+    }
+
+    VkInstanceCreateInfo inst_ci;
+    inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    inst_ci.pNext = nullptr;
+    inst_ci.flags = 0;
+    inst_ci.pApplicationInfo = nullptr;
+    inst_ci.enabledLayerCount = (uint32_t)layer_names.size();
+    inst_ci.ppEnabledLayerNames = layer_names.data();
+    inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
+    inst_ci.ppEnabledExtensionNames = extension_names.data();
+
+    VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
+        return true;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
+        return false;
+    }
 }
 
 void vgraphplay::gfx::System::cleanupInstance() {
@@ -230,29 +198,30 @@ void vgraphplay::gfx::System::cleanupInstance() {
 }
 
 bool vgraphplay::gfx::System::initDebugCallback() {
-    if (m_instance != VK_NULL_HANDLE && m_debug_callback == VK_NULL_HANDLE) {
-        VkDebugReportCallbackCreateInfoEXT drc_ci;
-        drc_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-        drc_ci.pNext = nullptr;
-        drc_ci.flags =
-            VK_DEBUG_REPORT_ERROR_BIT_EXT |
-            VK_DEBUG_REPORT_WARNING_BIT_EXT |
-            VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-            VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-            VK_DEBUG_REPORT_DEBUG_BIT_EXT;
-        drc_ci.pfnCallback = debugCallback;
-        drc_ci.pUserData = nullptr;
-
-        VkResult rslt = vkCreateDebugReportCallbackEXT(m_instance, &drc_ci, nullptr, &m_debug_callback);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Debug report callback created: " << m_debug_callback;
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Error creating debug report callback: " << rslt;
-            return false;
-        }
+    if (m_instance == VK_NULL_HANDLE || m_debug_callback != VK_NULL_HANDLE) {
+        return true;
     }
 
-    return true;
+    VkDebugReportCallbackCreateInfoEXT drc_ci;
+    drc_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+    drc_ci.pNext = nullptr;
+    drc_ci.flags =
+        VK_DEBUG_REPORT_ERROR_BIT_EXT |
+        VK_DEBUG_REPORT_WARNING_BIT_EXT |
+        VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+        VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+        VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+    drc_ci.pfnCallback = debugCallback;
+    drc_ci.pUserData = nullptr;
+
+    VkResult rslt = vkCreateDebugReportCallbackEXT(m_instance, &drc_ci, nullptr, &m_debug_callback);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Debug report callback created: " << m_debug_callback;
+        return true;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating debug report callback: " << rslt;
+        return false;
+    }
 }
 
 void vgraphplay::gfx::System::cleanupDebugCallback() {
@@ -260,6 +229,187 @@ void vgraphplay::gfx::System::cleanupDebugCallback() {
         BOOST_LOG_TRIVIAL(trace) << "Destroying debug report callback: " << m_debug_callback;
         vkDestroyDebugReportCallbackEXT(m_instance, m_debug_callback, nullptr);
         m_debug_callback = VK_NULL_HANDLE;
+    }
+}
+
+bool vgraphplay::gfx::System::initDevice() {
+    if (m_device != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_instance == VK_NULL_HANDLE || m_surface == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create device.";
+        return false;
+    }
+
+    logPhysicalDevices(m_instance);
+
+    uint32_t num_devices;
+    vkEnumeratePhysicalDevices(m_instance, &num_devices, nullptr);
+    std::vector<VkPhysicalDevice> devices(num_devices);
+    vkEnumeratePhysicalDevices(m_instance, &num_devices, devices.data());
+
+    ChosenDeviceInfo chosen = choosePhysicalDevice(devices, m_surface);
+
+    if (chosen.dev == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    m_physical_device = chosen.dev;
+
+    BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device
+                             << " graphics queue family = " << chosen.graphics_queue_family
+                             << " present queue family = " << chosen.present_queue_family;
+
+    float queue_priority = 1.0;
+    std::vector<VkDeviceQueueCreateInfo> queue_cis;
+    VkDeviceQueueCreateInfo queue_ci;
+    queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_ci.pNext = nullptr;
+    queue_ci.flags = 0;
+    queue_ci.queueFamilyIndex = chosen.graphics_queue_family;
+    queue_ci.queueCount = 1;
+    queue_ci.pQueuePriorities = &queue_priority;
+    queue_cis.push_back(queue_ci);
+
+    if (chosen.present_queue_family != chosen.graphics_queue_family) {
+        VkDeviceQueueCreateInfo queue_ci;
+        queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queue_ci.pNext = nullptr;
+        queue_ci.flags = 0;
+        queue_ci.queueFamilyIndex = chosen.present_queue_family;
+        queue_ci.queueCount = 1;
+        queue_ci.pQueuePriorities = &queue_priority;
+        queue_cis.push_back(queue_ci);
+    }
+
+    std::vector<const char*> extension_names;
+    extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    VkDeviceCreateInfo device_ci;
+    device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_ci.pNext = nullptr;
+    device_ci.flags = 0;
+    device_ci.queueCreateInfoCount = (uint32_t)queue_cis.size();
+    device_ci.pQueueCreateInfos = queue_cis.data();
+    device_ci.enabledLayerCount = 0;
+    device_ci.ppEnabledLayerNames = nullptr;
+    device_ci.pEnabledFeatures = nullptr;
+    device_ci.enabledExtensionCount = (uint32_t)extension_names.size();
+    device_ci.ppEnabledExtensionNames = extension_names.data();
+
+    VkResult rslt = vkCreateDevice(m_physical_device, &device_ci, nullptr, &m_device);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Device created: " << m_device;
+        m_graphics_queue_family = chosen.graphics_queue_family;
+        m_present_queue_family = chosen.present_queue_family;
+        vkGetDeviceQueue(m_device, m_graphics_queue_family, 0, &m_graphics_queue);
+        BOOST_LOG_TRIVIAL(trace) << "Graphics queue: " << m_graphics_queue;
+        vkGetDeviceQueue(m_device, m_present_queue_family, 0, &m_present_queue);
+        BOOST_LOG_TRIVIAL(trace) << "Present queue: " << m_present_queue;
+        return true;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
+        return false;
+    }
+}
+
+void vgraphplay::gfx::System::cleanupDevice() {
+    if (m_device != VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(trace) << "Destroying device: " << m_device;
+        vkDestroyDevice(m_device, nullptr);
+        m_device = VK_NULL_HANDLE;
+    }
+}
+
+vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface) {
+    const uint32_t MAX_INT = std::numeric_limits<uint32_t>::max();
+    
+    for (auto &dev : devices) {
+        // Do we have queue families suitable for graphics / presentation?
+        uint32_t graphics_queue = MAX_INT, present_queue = MAX_INT, num_queue_families = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
+        std::vector<VkQueueFamilyProperties> queue_families{num_queue_families};
+        vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
+
+        for (uint32_t id = 0; id < queue_families.size(); ++id) {
+            if (graphics_queue == MAX_INT && queue_families[id].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                graphics_queue = id;
+            }
+
+            if (present_queue == MAX_INT) {
+                VkBool32 supports_present = false;
+                vkGetPhysicalDeviceSurfaceSupportKHR(dev, id, surface, &supports_present);
+                if (supports_present) {
+                    present_queue = id;
+                }
+            }
+        }
+
+        if (graphics_queue == MAX_INT && present_queue == MAX_INT) {
+            continue;
+        }
+
+        // Are the extensions / layers we want supported?
+        uint32_t num_extensions = 0;
+        vkEnumerateDeviceExtensionProperties(dev, nullptr, &num_extensions, nullptr);
+        std::vector<VkExtensionProperties> extensions{num_extensions};
+        vkEnumerateDeviceExtensionProperties(dev, nullptr, &num_extensions, extensions.data());
+
+        std::set<std::string> required_extensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
+        for (const auto &extension : extensions) {
+            required_extensions.erase(extension.extensionName);
+        }
+
+        if (!required_extensions.empty()) {
+            continue;
+        }
+        
+        // Are swapchains supported, and are there surface formats / present modes we can use?
+        uint32_t num_formats = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &num_formats, nullptr);
+        uint32_t num_present_modes = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &num_present_modes, nullptr);
+
+        if (num_formats > 0 && num_present_modes > 0) {
+            return {
+                dev,
+                graphics_queue,
+                present_queue,
+            };
+        }
+    }
+
+    return {
+        VK_NULL_HANDLE,
+        MAX_INT,
+        MAX_INT,
+    };
+}
+
+bool vgraphplay::gfx::System::initSurface() {
+    if (m_surface != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    VkResult rslt = glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
+        return true;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating surface: " << rslt;
+        return false;
+    }
+}
+
+void vgraphplay::gfx::System::cleanupSurface() {
+    if (m_instance != VK_NULL_HANDLE && m_surface != VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
+        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+        m_surface = VK_NULL_HANDLE;
     }
 }
 

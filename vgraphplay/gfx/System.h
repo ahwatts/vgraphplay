@@ -35,6 +35,13 @@ namespace vgraphplay {
             bool initDebugCallback();
             void cleanupDebugCallback();
 
+            bool initDevice();
+            void cleanupDevice();
+            ChosenDeviceInfo choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface);
+
+            bool initSurface();
+            void cleanupSurface();
+
             GLFWwindow *m_window;
 
             // Instance, device, and debug callback.

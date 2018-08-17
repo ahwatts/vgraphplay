@@ -23,9 +23,6 @@ namespace vgraphplay {
             bool initialize(bool debug);
             void dispose();
 
-            bool recreateSwapchain();
-            void cleanupSwapchain();
-
             void drawFrame();
 
         private:
@@ -41,6 +38,12 @@ namespace vgraphplay {
 
             bool initSurface();
             void cleanupSurface();
+
+            bool initSwapchain();
+            void cleanupSwapchain();
+            VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
+            VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
+            VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps);
 
             GLFWwindow *m_window;
 

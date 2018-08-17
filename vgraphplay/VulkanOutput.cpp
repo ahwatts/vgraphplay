@@ -5,7 +5,7 @@
 
 #include <boost/log/trivial.hpp>
 
-#include "../vulkan.h"
+#include "vulkan.h"
 
 #include "VulkanOutput.h"
 

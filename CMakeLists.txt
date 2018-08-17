@@ -52,8 +52,8 @@ add_executable(vgraphplay
   # vgraphplay/gfx/Pipeline.cpp
   # vgraphplay/gfx/Presentation.cpp
   vgraphplay/gfx/System.cpp
-  vgraphplay/gfx/VulkanExt.cpp
-  vgraphplay/gfx/VulkanOutput.cpp
+  vgraphplay/VulkanExt.cpp
+  vgraphplay/VulkanOutput.cpp
   vgraphplay/vgraphplay.cpp
   ${EMBEDDED_SHADERS})
 target_compile_features(vgraphplay PUBLIC cxx_std_11)

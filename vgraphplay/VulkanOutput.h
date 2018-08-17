@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "../vulkan.h"
+#include "vulkan.h"
 
 namespace vgraphplay {
     void logGlobalExtensions();

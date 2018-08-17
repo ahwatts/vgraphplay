@@ -9,11 +9,12 @@
 
 namespace vgraphplay {
     namespace gfx {
-        class CommandQueues;
-        class CommandStore;
-        class Pipeline;
-        class Presentation;
-        
+        struct ChosenDeviceInfo {
+            VkPhysicalDevice dev;
+            uint32_t graphics_queue_family;
+            uint32_t present_queue_family;
+        };
+
         class System {
         public:
             System(GLFWwindow *window);
@@ -22,23 +23,52 @@ namespace vgraphplay {
             bool initialize(bool debug);
             void dispose();
 
-            bool recordCommands();
+            bool recreateSwapchain();
+            void cleanupSwapchain();
+
             void drawFrame();
 
-            inline GLFWwindow* window() { return m_window; }
-            inline VkInstance& instance() { return m_instance; }
-            inline VkSurfaceKHR& surface() { return m_surface; }
-            inline VkDebugReportCallbackEXT& callback() { return m_callback; }
+        private:
+            bool initInstance(bool debug);
+            void cleanupInstance();
 
-            inline Device& device() { return m_device; }
+            bool initDebugCallback();
+            void cleanupDebugCallback();
 
-        protected:
             GLFWwindow *m_window;
+
+            // Instance, device, and debug callback.
             VkInstance m_instance;
-            VkDebugReportCallbackEXT m_callback;
+            VkDebugReportCallbackEXT m_debug_callback;
+            VkDevice m_device;
+            VkPhysicalDevice m_physical_device;
+
+            // Command queues / buffers / pool.
+            uint32_t m_graphics_queue_family;
+            uint32_t m_present_queue_family;
+            VkQueue m_graphics_queue;
+            VkQueue m_present_queue;
+            VkCommandPool m_command_pool;
+            std::vector<VkCommandBuffer> m_command_buffers;
+
+            // Presentation-related structures.
             VkSurfaceKHR m_surface;
-            
-            Device m_device;
+            VkSwapchainKHR m_swapchain;
+            std::vector<VkImage> m_swapchain_images;
+            std::vector<VkImageView> m_swapchain_image_views;
+            VkSurfaceFormatKHR m_swapchain_format;
+            VkExtent2D m_swapchain_extent;
+
+            // Pipeline-related structures.
+            VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
+            VkPipelineLayout m_pipeline_layout;
+            VkRenderPass m_render_pass;
+            VkPipeline m_pipeline;
+            std::vector<VkFramebuffer> m_swapchain_framebuffers;
+
+            // Semaphores.
+            VkSemaphore m_image_available_semaphore;
+            VkSemaphore m_render_finished_semaphore;
         };
     }
 }

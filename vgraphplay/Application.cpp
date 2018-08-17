@@ -25,9 +25,6 @@ vgraphplay::Application::~Application() {
 
 bool vgraphplay::Application::initialize(bool debug) {
     bool rv = m_gfx.initialize(debug);
-    if (rv) {
-        m_gfx.recordCommands();
-    }
     return rv;
 }
 
@@ -74,5 +71,4 @@ void vgraphplay::Application::run() {
         glfwPollEvents();
         m_gfx.drawFrame();
     }
-    vkDeviceWaitIdle(m_gfx.device().device());
 }

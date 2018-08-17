@@ -47,10 +47,10 @@ embed_resources(EMBEDDED_SHADERS ${SPIRV_SHADERS})
 
 add_executable(vgraphplay
   vgraphplay/Application.cpp
-  vgraphplay/gfx/Commands.cpp
-  vgraphplay/gfx/Device.cpp
-  vgraphplay/gfx/Pipeline.cpp
-  vgraphplay/gfx/Presentation.cpp
+  # vgraphplay/gfx/Commands.cpp
+  # vgraphplay/gfx/Device.cpp
+  # vgraphplay/gfx/Pipeline.cpp
+  # vgraphplay/gfx/Presentation.cpp
   vgraphplay/gfx/System.cpp
   vgraphplay/gfx/VulkanExt.cpp
   vgraphplay/gfx/VulkanOutput.cpp

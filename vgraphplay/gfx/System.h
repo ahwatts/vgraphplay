@@ -3,9 +3,11 @@
 #ifndef _VGRAPHPLAY_VGRAPHPLAY_GFX_SYSTEM_H_
 #define _VGRAPHPLAY_VGRAPHPLAY_GFX_SYSTEM_H_
 
+#include <vector>
+
 #include "../vulkan.h"
 
-#include "Device.h"
+#include "Resource.h"
 
 namespace vgraphplay {
     namespace gfx {
@@ -44,6 +46,32 @@ namespace vgraphplay {
             VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
             VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
             VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps);
+
+            bool initRenderPass();
+            void cleanupRenderPass();
+
+            bool initShaderModules();
+            void cleanupShaderModules();
+            VkShaderModule createShaderModule(const Resource &rsrc);
+
+            bool initPipelineLayout();
+            void cleanupPipelineLayout();
+
+            bool initPipeline();
+            void cleanupPipeline();
+
+            bool initSwapchainFramebuffers();
+            void cleanupSwapchainFramebuffers();
+
+            bool initSemaphores();
+            void cleanupSemaphores();
+
+            bool initCommandPool();
+            void cleanupCommandPool();
+
+            bool initCommandBuffers();
+            void cleanupCommandBuffers();
+            bool recordCommandBuffers();
 
             GLFWwindow *m_window;
 

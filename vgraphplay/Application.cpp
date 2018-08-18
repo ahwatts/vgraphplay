@@ -1,10 +1,12 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
 #include <iostream>
+#include <vector>
 
 #include "vulkan.h"
 
 #include "Application.h"
+#include "Resource.h"
 #include "gfx/System.h"
 
 vgraphplay::Application::Application(GLFWwindow *window)

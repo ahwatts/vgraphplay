@@ -26,6 +26,7 @@ namespace vgraphplay {
             void dispose();
 
             void drawFrame();
+            void setFramebufferResized();
 
         private:
             bool initInstance(bool debug);
@@ -46,6 +47,7 @@ namespace vgraphplay {
             VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
             VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
             VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps);
+            void recreateSwapchain();
 
             bool initRenderPass();
             void cleanupRenderPass();
@@ -96,6 +98,7 @@ namespace vgraphplay {
             std::vector<VkImageView> m_swapchain_image_views;
             VkSurfaceFormatKHR m_swapchain_format;
             VkExtent2D m_swapchain_extent;
+            bool m_framebuffer_resized;
 
             // Pipeline-related structures.
             VkShaderModule m_vertex_shader_module, m_fragment_shader_module;

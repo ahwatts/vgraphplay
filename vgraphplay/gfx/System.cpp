@@ -114,6 +114,27 @@ void vgraphplay::gfx::System::dispose() {
     cleanupInstance();
 }
 
+void vgraphplay::gfx::System::recreateSwapchain() {
+    if (m_device != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(m_device);
+    }
+
+    cleanupCommandBuffers();
+    cleanupSwapchainFramebuffers();
+    cleanupPipeline();
+    cleanupPipelineLayout();
+    cleanupRenderPass();
+    cleanupSwapchain();
+
+    bool rv = initSwapchain();
+    rv = rv && initRenderPass();
+    rv = rv && initPipelineLayout();
+    rv = rv && initPipeline();
+    rv = rv && initSwapchainFramebuffers();
+    rv = rv && initCommandBuffers();
+    rv = rv && recordCommandBuffers();
+}
+
 bool vgraphplay::gfx::System::initInstance(bool debug) {
     if (m_instance != VK_NULL_HANDLE) {
         return true;
@@ -936,6 +957,7 @@ void vgraphplay::gfx::System::cleanupPipeline() {
     if (m_device != VK_NULL_HANDLE && m_pipeline != VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(trace) << "Destroying pipeline: " << m_pipeline;
         vkDestroyPipeline(m_device, m_pipeline, nullptr);
+        m_pipeline = VK_NULL_HANDLE;
     }
 }
 
@@ -977,9 +999,12 @@ bool vgraphplay::gfx::System::initSwapchainFramebuffers() {
 void vgraphplay::gfx::System::cleanupSwapchainFramebuffers() {
     if (m_device != VK_NULL_HANDLE && m_swapchain_framebuffers.size() > 0) {
         for (unsigned int i = 0; i < m_swapchain_framebuffers.size(); ++i) {
-            BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain framebuffer " << i << ": " << m_swapchain_framebuffers[i];
-            vkDestroyFramebuffer(m_device, m_swapchain_framebuffers[i], nullptr);
+            if (m_swapchain_framebuffers[i] != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain framebuffer " << i << ": " << m_swapchain_framebuffers[i];
+                vkDestroyFramebuffer(m_device, m_swapchain_framebuffers[i], nullptr);
+            }
         }
+        m_swapchain_framebuffers.clear();
     }
 }
 
@@ -1026,11 +1051,13 @@ void vgraphplay::gfx::System::cleanupSemaphores() {
     if (m_device != VK_NULL_HANDLE && m_image_available_semaphore != VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(trace) << "Destroying image available semaphore: " << m_image_available_semaphore;
         vkDestroySemaphore(m_device, m_image_available_semaphore, nullptr);
+        m_image_available_semaphore = VK_NULL_HANDLE;
     }
 
     if (m_device != VK_NULL_HANDLE && m_render_finished_semaphore != VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(trace) << "Destroying render finished semaphore: " << m_render_finished_semaphore;
         vkDestroySemaphore(m_device, m_render_finished_semaphore, nullptr);
+        m_render_finished_semaphore = VK_NULL_HANDLE;
     }
 }
 
@@ -1064,6 +1091,7 @@ void vgraphplay::gfx::System::cleanupCommandPool() {
     if (m_device != VK_NULL_HANDLE && m_command_pool != VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(trace) << "Destroying command pool: " << m_command_pool;
         vkDestroyCommandPool(m_device, m_command_pool, nullptr);
+        m_command_pool = VK_NULL_HANDLE;
     }
 }
 
@@ -1154,8 +1182,16 @@ bool vgraphplay::gfx::System::recordCommandBuffers() {
 
 void vgraphplay::gfx::System::drawFrame() {
     uint32_t image_index;
-    vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<uint64_t>::max(),
-                          m_image_available_semaphore, VK_NULL_HANDLE, &image_index);
+    VkResult rslt = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<uint64_t>::max(),
+                                          m_image_available_semaphore, VK_NULL_HANDLE, &image_index);
+
+    if (rslt == VK_ERROR_OUT_OF_DATE_KHR || rslt == VK_SUBOPTIMAL_KHR) {
+        recreateSwapchain();
+        return;
+    } else if (rslt != VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(error) << "Error acquiring next swapchain image: " << rslt;
+        return;
+    }
 
     VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     VkSubmitInfo si;
@@ -1169,7 +1205,7 @@ void vgraphplay::gfx::System::drawFrame() {
     si.signalSemaphoreCount = 1;
     si.pSignalSemaphores = &m_render_finished_semaphore;
 
-    VkResult rslt = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
+    rslt = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
     if (rslt != VK_SUCCESS) {
         BOOST_LOG_TRIVIAL(error) << "Error submitting draw command buffer: " << rslt;
     }
@@ -1188,4 +1224,8 @@ void vgraphplay::gfx::System::drawFrame() {
     if (rslt != VK_SUCCESS) {
         BOOST_LOG_TRIVIAL(error) << "Error submitting swapchain update: " << rslt;
     }
+}
+
+void vgraphplay::gfx::System::setFramebufferResized() {
+    m_framebuffer_resized = true;
 }

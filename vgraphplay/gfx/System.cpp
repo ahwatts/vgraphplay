@@ -1187,7 +1187,6 @@ void vgraphplay::gfx::System::drawFrame() {
     if (m_framebuffer_resized) {
         recreateSwapchain();
         m_framebuffer_resized = false;
-        return;
     }
 
     VkResult rslt = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<uint64_t>::max(),

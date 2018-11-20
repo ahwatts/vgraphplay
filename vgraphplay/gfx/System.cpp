@@ -116,6 +116,13 @@ void vgraphplay::gfx::System::dispose() {
 }
 
 void vgraphplay::gfx::System::recreateSwapchain() {
+    int width{0}, height{0};
+
+    while (width == 0 && height == 0) {
+        glfwGetFramebufferSize(m_window, &width, &height);
+        glfwWaitEvents();
+    }
+    
     if (m_device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(m_device);
     }

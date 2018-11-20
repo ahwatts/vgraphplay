@@ -58,6 +58,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_swapchain_image_views{},
       m_swapchain_format{VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
       m_swapchain_extent{0, 0},
+      m_framebuffer_resized{false},
       m_vertex_shader_module{VK_NULL_HANDLE},
       m_fragment_shader_module{VK_NULL_HANDLE},
       m_pipeline_layout{VK_NULL_HANDLE},
@@ -1182,6 +1183,13 @@ bool vgraphplay::gfx::System::recordCommandBuffers() {
 
 void vgraphplay::gfx::System::drawFrame() {
     uint32_t image_index;
+
+    if (m_framebuffer_resized) {
+        recreateSwapchain();
+        m_framebuffer_resized = false;
+        return;
+    }
+
     VkResult rslt = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<uint64_t>::max(),
                                           m_image_available_semaphore, VK_NULL_HANDLE, &image_index);
 

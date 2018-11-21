@@ -3,6 +3,8 @@
 #include <set>
 #include <vector>
 
+#include <glm/gtx/io.hpp>
+
 #include <boost/log/trivial.hpp>
 
 #include "../vulkan.h"
@@ -52,6 +54,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_present_queue{VK_NULL_HANDLE},
       m_command_pool{VK_NULL_HANDLE},
       m_command_buffers{},
+      m_vertex_buffer{VK_NULL_HANDLE},
+      m_vertex_buffer_memory{VK_NULL_HANDLE},
       m_surface{VK_NULL_HANDLE},
       m_swapchain{VK_NULL_HANDLE},
       m_swapchain_images{},
@@ -90,6 +94,7 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initSwapchainFramebuffers();
     rv = rv && initSemaphores();
     rv = rv && initCommandPool();
+    rv = rv && initVertexBuffer();
     rv = rv && initCommandBuffers();
     rv = rv && recordCommandBuffers();
 
@@ -102,6 +107,7 @@ void vgraphplay::gfx::System::dispose() {
     }
 
     cleanupCommandPool();
+    cleanupVertexBuffer();
     cleanupSemaphores();
     cleanupSwapchainFramebuffers();
     cleanupPipeline();
@@ -148,8 +154,8 @@ bool vgraphplay::gfx::System::initInstance(bool debug) {
         return true;
     }
 
-    logGlobalExtensions();
-    logGlobalLayers();
+    // logGlobalExtensions();
+    // logGlobalLayers();
 
     // The list of extensions we need.
     std::vector<const char*> extension_names;
@@ -172,19 +178,20 @@ bool vgraphplay::gfx::System::initInstance(bool debug) {
     vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
     std::vector<VkExtensionProperties> instance_extensions{num_extensions};
     vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, instance_extensions.data());
-    for (unsigned int i = 0; i < extension_names.size(); ++i) {
+    for (auto&& wanted_extension_name : extension_names) {
         bool found = false;
-        std::string wanted_extension_name{extension_names[i]};
-        for (unsigned int j = 0; j < instance_extensions.size(); ++j) {
-            std::string extension_name{instance_extensions[j].extensionName};
-            if (wanted_extension_name == extension_name) {
+        std::string wanted_extension_name_str{wanted_extension_name};
+        BOOST_LOG_TRIVIAL(debug) << "wanted extension " << wanted_extension_name_str;
+        for (auto&& extension : instance_extensions) {
+            std::string extension_name_str{extension.extensionName};
+            if (wanted_extension_name_str == extension_name_str) {
                 found = true;
                 break;
             }
         }
 
         if (!found) {
-            BOOST_LOG_TRIVIAL(error) << "Unable to find extension " << extension_names[i] << ". Cannot continue.";
+            BOOST_LOG_TRIVIAL(error) << "Unable to find extension " << wanted_extension_name_str << ". Cannot continue.";
             return false;
         }
     }
@@ -834,14 +841,17 @@ bool vgraphplay::gfx::System::initPipeline() {
     ss_ci[1].pName = "main";
     ss_ci[1].pSpecializationInfo = nullptr;
 
+    auto bind_desc = Vertex::bindingDescription();
+    auto attr_desc = Vertex::attributeDescription();
+
     VkPipelineVertexInputStateCreateInfo vert_in_ci;
     vert_in_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vert_in_ci.pNext = nullptr;
     vert_in_ci.flags = 0;
-    vert_in_ci.vertexBindingDescriptionCount = 0;
-    vert_in_ci.pVertexBindingDescriptions = nullptr;
-    vert_in_ci.vertexAttributeDescriptionCount = 0;
-    vert_in_ci.pVertexAttributeDescriptions = nullptr;
+    vert_in_ci.vertexBindingDescriptionCount = 1;
+    vert_in_ci.pVertexBindingDescriptions = &bind_desc;
+    vert_in_ci.vertexAttributeDescriptionCount = 2;
+    vert_in_ci.pVertexAttributeDescriptions = attr_desc.data();
 
     VkPipelineInputAssemblyStateCreateInfo input_asm_ci;
     input_asm_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1103,6 +1113,121 @@ void vgraphplay::gfx::System::cleanupCommandPool() {
     }
 }
 
+uint32_t findMemoryType(VkPhysicalDevice device, uint32_t type_filter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
+
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        if (type_filter & (1 << i) &&
+            (mem_props.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    return std::numeric_limits<uint32_t>::max();
+}
+
+bool vgraphplay::gfx::System::initVertexBuffer() {
+    if (m_vertex_buffer != VK_NULL_HANDLE && m_vertex_buffer_memory != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create vertex buffer.";
+        return false;
+    }
+
+    VkBufferCreateInfo buf_ci;
+    buf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buf_ci.pNext = nullptr;
+    buf_ci.flags = 0;
+    buf_ci.size = 3*sizeof(Vertex);
+    buf_ci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    buf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    buf_ci.queueFamilyIndexCount = 0;
+    buf_ci.pQueueFamilyIndices = nullptr;
+
+    VkResult rslt = vkCreateBuffer(m_device, &buf_ci, nullptr, &m_vertex_buffer);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created vertex buffer: " << m_vertex_buffer;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating vertex buffer " << rslt;
+        return false;
+    }
+
+    VkMemoryRequirements mem_reqs;
+    vkGetBufferMemoryRequirements(m_device, m_vertex_buffer, &mem_reqs);
+    uint32_t memory_type = findMemoryType(
+        m_physical_device, mem_reqs.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (memory_type == std::numeric_limits<uint32_t>::max()) {
+        BOOST_LOG_TRIVIAL(error) << "No suitable memory type for vertex buffer";
+        return false;
+    }
+
+    VkMemoryAllocateInfo mem_ai;
+    mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mem_ai.pNext = nullptr;
+    mem_ai.allocationSize = mem_reqs.size;
+    mem_ai.memoryTypeIndex = memory_type;
+
+    rslt = vkAllocateMemory(m_device, &mem_ai, nullptr, &m_vertex_buffer_memory);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Allocated vertex buffer memory: " << m_vertex_buffer_memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error allocating vertex buffer memory " << rslt;
+        return false;
+    }
+
+    rslt = vkBindBufferMemory(m_device, m_vertex_buffer, m_vertex_buffer_memory, 0);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Bound vertex buffer memory " << m_vertex_buffer_memory << " to vertex buffer " << m_vertex_buffer;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error binding vertex buffer memory to vertex buffer " << rslt;
+        return false;
+    }
+
+    void *buffer_data;
+    rslt = vkMapMemory(m_device, m_vertex_buffer_memory, 0, mem_reqs.size, 0, &buffer_data);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Mapped vertex buffer memory " << m_vertex_buffer_memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to map vertex buffer memory " << rslt;
+        return false;
+    }
+
+    Vertex *vertices = static_cast<Vertex*>(buffer_data);
+    vertices[0].pos = {0.0f, -0.5f};
+    vertices[0].color = {1.0f, 0.0f, 0.0f};
+    vertices[1].pos = {0.5f, 0.5f};
+    vertices[1].color = {0.0f, 1.0f, 0.0f};
+    vertices[2].pos = {-0.5f, 0.5f};
+    vertices[2].color = {0.0f, 0.0f, 1.0f};
+
+    vkUnmapMemory(m_device, m_vertex_buffer_memory);
+    BOOST_LOG_TRIVIAL(trace) << "Unmapped vertex buffer memory " << m_vertex_buffer_memory;
+
+    return true;
+}
+
+void vgraphplay::gfx::System::cleanupVertexBuffer() {
+    if (m_device != VK_NULL_HANDLE) {
+        if (m_vertex_buffer != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Destroying vertex buffer: " << m_vertex_buffer;
+            vkDestroyBuffer(m_device, m_vertex_buffer, nullptr);
+            m_vertex_buffer = VK_NULL_HANDLE;
+        }
+
+        if (m_vertex_buffer_memory != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Deallocating vertex buffer memory: " << m_vertex_buffer_memory;
+            vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
+            m_vertex_buffer_memory = VK_NULL_HANDLE;
+        }
+    }
+}
+
 bool vgraphplay::gfx::System::initCommandBuffers() {
     if (m_command_buffers.size() > 0) {
         return true;
@@ -1171,8 +1296,12 @@ bool vgraphplay::gfx::System::recordCommandBuffers() {
         rp_bi.clearValueCount = 1;
         rp_bi.pClearValues = &clearColor;
 
+        VkBuffer vertex_buffers[] = {m_vertex_buffer};
+        VkDeviceSize offsets[] = {0};
+
         vkCmdBeginRenderPass(m_command_buffers[i], &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(m_command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+        vkCmdBindVertexBuffers(m_command_buffers[i], 0, 1, vertex_buffers, offsets);
         vkCmdDraw(m_command_buffers[i], 3, 1, 0, 0);
         vkCmdEndRenderPass(m_command_buffers[i]);
 
@@ -1242,4 +1371,28 @@ void vgraphplay::gfx::System::drawFrame() {
 
 void vgraphplay::gfx::System::setFramebufferResized() {
     m_framebuffer_resized = true;
+}
+
+VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
+    VkVertexInputBindingDescription desc;
+    desc.binding = 0;
+    desc.stride = sizeof(vgraphplay::gfx::Vertex);
+    desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    return desc;
+}
+
+std::array<VkVertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attributeDescription() {
+    std::array<VkVertexInputAttributeDescription, 2> descs{};
+
+    descs[0].binding = 0;
+    descs[0].location = 0;
+    descs[0].offset = offsetof(vgraphplay::gfx::Vertex, pos);
+    descs[0].format = VK_FORMAT_R32G32_SFLOAT;
+
+    descs[0].binding = 0;
+    descs[0].location = 1;
+    descs[0].offset = offsetof(vgraphplay::gfx::Vertex, color);
+    descs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+
+    return descs;
 }

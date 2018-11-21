@@ -3,7 +3,10 @@
 #ifndef _VGRAPHPLAY_VGRAPHPLAY_GFX_SYSTEM_H_
 #define _VGRAPHPLAY_VGRAPHPLAY_GFX_SYSTEM_H_
 
+#include <array>
 #include <vector>
+#include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 
 #include "../vulkan.h"
 
@@ -11,6 +14,14 @@
 
 namespace vgraphplay {
     namespace gfx {
+        struct Vertex {
+            glm::vec2 pos;
+            glm::vec3 color;
+
+            static VkVertexInputBindingDescription bindingDescription();
+            static std::array<VkVertexInputAttributeDescription, 2> attributeDescription();
+        };
+
         struct ChosenDeviceInfo {
             VkPhysicalDevice dev;
             uint32_t graphics_queue_family;
@@ -71,6 +82,9 @@ namespace vgraphplay {
             bool initCommandPool();
             void cleanupCommandPool();
 
+            bool initVertexBuffer();
+            void cleanupVertexBuffer();
+
             bool initCommandBuffers();
             void cleanupCommandBuffers();
             bool recordCommandBuffers();
@@ -90,6 +104,10 @@ namespace vgraphplay {
             VkQueue m_present_queue;
             VkCommandPool m_command_pool;
             std::vector<VkCommandBuffer> m_command_buffers;
+
+            // Draw data.
+            VkBuffer m_vertex_buffer;
+            VkDeviceMemory m_vertex_buffer_memory;
 
             // Presentation-related structures.
             VkSurfaceKHR m_surface;

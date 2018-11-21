@@ -23,8 +23,9 @@ int main(int argc, char **argv) {
     initGLFW(WIDTH, HEIGHT, "VGraphplay", &window);
 
     Application app{window};
-    app.initialize(true);
-    app.run();
+    if (app.initialize(true)) {
+        app.run();
+    }
     app.dispose();
 
     glfwTerminate();

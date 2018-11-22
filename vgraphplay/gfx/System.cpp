@@ -3,8 +3,6 @@
 #include <set>
 #include <vector>
 
-#include <glm/gtx/io.hpp>
-
 #include <boost/log/trivial.hpp>
 
 #include "../vulkan.h"
@@ -1389,10 +1387,10 @@ std::array<VkVertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attrib
     descs[0].offset = offsetof(vgraphplay::gfx::Vertex, pos);
     descs[0].format = VK_FORMAT_R32G32_SFLOAT;
 
-    descs[0].binding = 0;
-    descs[0].location = 1;
-    descs[0].offset = offsetof(vgraphplay::gfx::Vertex, color);
-    descs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    descs[1].binding = 0;
+    descs[1].location = 1;
+    descs[1].offset = offsetof(vgraphplay::gfx::Vertex, color);
+    descs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 
     return descs;
 }

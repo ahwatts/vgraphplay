@@ -63,7 +63,8 @@ target_link_libraries(vgraphplay
   Boost::log
   Boost::filesystem
   Vulkan::Vulkan
-  glfw)
+  glfw
+  glm)
 
 if(CMAKE_COMPILER_IS_GNUCXX)
   target_compile_options(vgraphplay PUBLIC "-Wall" "-Og" "-pg" "-ggdb")

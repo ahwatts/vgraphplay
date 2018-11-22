@@ -89,6 +89,10 @@ namespace vgraphplay {
             void cleanupCommandBuffers();
             bool recordCommandBuffers();
 
+            bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
+            uint32_t chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags mem_props);
+            bool copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
+
             GLFWwindow *m_window;
 
             // Instance, device, and debug callback.

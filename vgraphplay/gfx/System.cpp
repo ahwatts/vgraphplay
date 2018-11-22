@@ -126,7 +126,7 @@ void vgraphplay::gfx::System::recreateSwapchain() {
         glfwGetFramebufferSize(m_window, &width, &height);
         glfwWaitEvents();
     }
-    
+
     if (m_device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(m_device);
     }
@@ -152,8 +152,8 @@ bool vgraphplay::gfx::System::initInstance(bool debug) {
         return true;
     }
 
-    // logGlobalExtensions();
-    // logGlobalLayers();
+    logGlobalExtensions();
+    logGlobalLayers();
 
     // The list of extensions we need.
     std::vector<const char*> extension_names;
@@ -379,7 +379,7 @@ void vgraphplay::gfx::System::cleanupDevice() {
 
 vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface) {
     const uint32_t MAX_INT = std::numeric_limits<uint32_t>::max();
-    
+
     for (auto &dev : devices) {
         // Do we have queue families suitable for graphics / presentation?
         uint32_t graphics_queue = MAX_INT, present_queue = MAX_INT, num_queue_families = 0;
@@ -422,7 +422,7 @@ vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(
         if (!required_extensions.empty()) {
             continue;
         }
-        
+
         // Are swapchains supported, and are there surface formats / present modes we can use?
         uint32_t num_formats = 0;
         vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &num_formats, nullptr);
@@ -1111,88 +1111,33 @@ void vgraphplay::gfx::System::cleanupCommandPool() {
     }
 }
 
-uint32_t findMemoryType(VkPhysicalDevice device, uint32_t type_filter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties mem_props;
-    vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
-
-    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
-        if (type_filter & (1 << i) &&
-            (mem_props.memoryTypes[i].propertyFlags & properties) == properties)
-        {
-            return i;
-        }
-    }
-
-    return std::numeric_limits<uint32_t>::max();
-}
-
 bool vgraphplay::gfx::System::initVertexBuffer() {
-    if (m_vertex_buffer != VK_NULL_HANDLE && m_vertex_buffer_memory != VK_NULL_HANDLE) {
+    if (m_vertex_buffer != VK_NULL_HANDLE &&
+        m_vertex_buffer_memory != VK_NULL_HANDLE)
+    {
         return true;
     }
 
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create vertex buffer.";
-        return false;
-    }
+    VkDeviceSize buffer_size = 3*sizeof(Vertex);
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+    bool rslt_b = createBuffer(buffer_size,
+                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                               staging_buffer,
+                               staging_buffer_memory);
 
-    VkBufferCreateInfo buf_ci;
-    buf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buf_ci.pNext = nullptr;
-    buf_ci.flags = 0;
-    buf_ci.size = 3*sizeof(Vertex);
-    buf_ci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    buf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    buf_ci.queueFamilyIndexCount = 0;
-    buf_ci.pQueueFamilyIndices = nullptr;
-
-    VkResult rslt = vkCreateBuffer(m_device, &buf_ci, nullptr, &m_vertex_buffer);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created vertex buffer: " << m_vertex_buffer;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating vertex buffer " << rslt;
-        return false;
-    }
-
-    VkMemoryRequirements mem_reqs;
-    vkGetBufferMemoryRequirements(m_device, m_vertex_buffer, &mem_reqs);
-    uint32_t memory_type = findMemoryType(
-        m_physical_device, mem_reqs.memoryTypeBits,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    if (memory_type == std::numeric_limits<uint32_t>::max()) {
-        BOOST_LOG_TRIVIAL(error) << "No suitable memory type for vertex buffer";
-        return false;
-    }
-
-    VkMemoryAllocateInfo mem_ai;
-    mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    mem_ai.pNext = nullptr;
-    mem_ai.allocationSize = mem_reqs.size;
-    mem_ai.memoryTypeIndex = memory_type;
-
-    rslt = vkAllocateMemory(m_device, &mem_ai, nullptr, &m_vertex_buffer_memory);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Allocated vertex buffer memory: " << m_vertex_buffer_memory;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error allocating vertex buffer memory " << rslt;
-        return false;
-    }
-
-    rslt = vkBindBufferMemory(m_device, m_vertex_buffer, m_vertex_buffer_memory, 0);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Bound vertex buffer memory " << m_vertex_buffer_memory << " to vertex buffer " << m_vertex_buffer;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error binding vertex buffer memory to vertex buffer " << rslt;
+    if (!rslt_b) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer";
         return false;
     }
 
     void *buffer_data;
-    rslt = vkMapMemory(m_device, m_vertex_buffer_memory, 0, mem_reqs.size, 0, &buffer_data);
+    VkResult rslt = vkMapMemory(m_device, staging_buffer_memory, 0, buffer_size, 0, &buffer_data);
     if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Mapped vertex buffer memory " << m_vertex_buffer_memory;
+        BOOST_LOG_TRIVIAL(trace) << "Mapped staging buffer memory " << staging_buffer_memory;
     } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to map vertex buffer memory " << rslt;
+        BOOST_LOG_TRIVIAL(error) << "Unable to map staging buffer memory " << rslt;
         return false;
     }
 
@@ -1204,8 +1149,33 @@ bool vgraphplay::gfx::System::initVertexBuffer() {
     vertices[2].pos = {-0.5f, 0.5f};
     vertices[2].color = {0.0f, 0.0f, 1.0f};
 
-    vkUnmapMemory(m_device, m_vertex_buffer_memory);
-    BOOST_LOG_TRIVIAL(trace) << "Unmapped vertex buffer memory " << m_vertex_buffer_memory;
+    vkUnmapMemory(m_device, staging_buffer_memory);
+    BOOST_LOG_TRIVIAL(trace) << "Unmapped staging buffer memory " << staging_buffer_memory;
+
+    rslt_b = createBuffer(buffer_size,
+                          VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                          m_vertex_buffer,
+                          m_vertex_buffer_memory);
+
+    if (!rslt_b) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create vertex buffer";
+        return false;
+    }
+
+    rslt_b = copyBuffer(staging_buffer, m_vertex_buffer, buffer_size);
+    if (!rslt_b) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to copy data to vertex buffer";
+        return false;
+    }
+
+    BOOST_LOG_TRIVIAL(trace) << "Destroying staging buffer: " << staging_buffer;
+    vkDestroyBuffer(m_device, staging_buffer, nullptr);
+    staging_buffer = VK_NULL_HANDLE;
+
+    BOOST_LOG_TRIVIAL(trace) << "Freeing staging buffer memory: " << staging_buffer_memory;
+    vkFreeMemory(m_device, staging_buffer_memory, nullptr);
+    staging_buffer_memory = VK_NULL_HANDLE;
 
     return true;
 }
@@ -1219,7 +1189,7 @@ void vgraphplay::gfx::System::cleanupVertexBuffer() {
         }
 
         if (m_vertex_buffer_memory != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Deallocating vertex buffer memory: " << m_vertex_buffer_memory;
+            BOOST_LOG_TRIVIAL(trace) << "Freeing vertex buffer memory: " << m_vertex_buffer_memory;
             vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
             m_vertex_buffer_memory = VK_NULL_HANDLE;
         }
@@ -1315,6 +1285,145 @@ bool vgraphplay::gfx::System::recordCommandBuffers() {
     return true;
 }
 
+uint32_t vgraphplay::gfx::System::chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(m_physical_device, &mem_props);
+
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        if (type_filter & (1 << i) &&
+            (mem_props.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    return std::numeric_limits<uint32_t>::max();
+}
+
+bool vgraphplay::gfx::System::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory) {
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Device has not been initialized. Cannot create buffer";
+        return false;
+    }
+
+    VkBufferCreateInfo buf_ci;
+    buf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buf_ci.pNext = nullptr;
+    buf_ci.flags = 0;
+    buf_ci.size = size;
+    buf_ci.usage = usage;
+    buf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    buf_ci.queueFamilyIndexCount = 0;
+    buf_ci.pQueueFamilyIndices = nullptr;
+
+    VkResult rslt = vkCreateBuffer(m_device, &buf_ci, nullptr, &buffer);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created buffer: " << buffer;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating buffer " << rslt;
+        return false;
+    }
+
+    VkMemoryRequirements mem_reqs;
+    vkGetBufferMemoryRequirements(m_device, buffer, &mem_reqs);
+    uint32_t memory_type = chooseMemoryTypeIndex(mem_reqs.memoryTypeBits, mem_props);
+    if (memory_type == std::numeric_limits<uint32_t>::max()) {
+        BOOST_LOG_TRIVIAL(error) << "No suitable memory type for buffer";
+        return false;
+    }
+
+    VkMemoryAllocateInfo mem_ai;
+    mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mem_ai.pNext = nullptr;
+    mem_ai.allocationSize = size;
+    mem_ai.memoryTypeIndex = memory_type;
+
+    rslt = vkAllocateMemory(m_device, &mem_ai, nullptr, &memory);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Allocated buffer memory: " << memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error allocating buffer memory " << rslt;
+        return false;
+    }
+
+    rslt = vkBindBufferMemory(m_device, buffer, memory, 0);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Bound memory allocation " << memory << " to buffer " << buffer;
+        return true;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error binding memory allocation to buffer " << rslt;
+        return false;
+    }
+}
+
+bool vgraphplay::gfx::System::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) {
+    VkCommandBufferAllocateInfo cb_ai;
+    cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cb_ai.pNext = nullptr;
+    cb_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cb_ai.commandPool = m_command_pool;
+    cb_ai.commandBufferCount = 1;
+
+    VkCommandBuffer xfer_cb;
+    VkResult rslt = vkAllocateCommandBuffers(m_device, &cb_ai, &xfer_cb);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Allocated command buffer for buffer copy: " << xfer_cb;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to allocate command buffer for buffer copy " << rslt;
+        return false;
+    }
+
+    VkCommandBufferBeginInfo cb_bi;
+    cb_bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cb_bi.pNext = nullptr;
+    cb_bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    cb_bi.pInheritanceInfo = nullptr;
+
+    VkBufferCopy region;
+    region.srcOffset = 0;
+    region.dstOffset = 0;
+    region.size = size;
+
+    vkBeginCommandBuffer(xfer_cb, &cb_bi);
+    vkCmdCopyBuffer(xfer_cb, src, dst, 1, &region);
+    rslt = vkEndCommandBuffer(xfer_cb);
+    if (rslt != VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(error) << "Error recording command buffer for buffer copy " << rslt;
+        return false;
+    }
+
+    VkSubmitInfo si;
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.pNext = nullptr;
+    si.waitSemaphoreCount = 0;
+    si.pWaitSemaphores = nullptr;
+    si.pWaitDstStageMask = nullptr;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &xfer_cb;
+    si.signalSemaphoreCount = 0;
+    si.pSignalSemaphores = nullptr;
+
+    rslt = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Submitted transfer command buffer for " << src << " to " << dst;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Failed to submit transfer command buffer " << rslt;
+        return false;
+    }
+
+    vkQueueWaitIdle(m_graphics_queue);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Finished transferring buffer " << src << " to " << dst;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error waiting for buffer transfer to complete " << rslt;
+        return false;
+    }
+
+    vkFreeCommandBuffers(m_device, m_command_pool, 1, &xfer_cb);
+
+    return true;
+}
+
 void vgraphplay::gfx::System::drawFrame() {
     uint32_t image_index;
 
@@ -1374,7 +1483,7 @@ void vgraphplay::gfx::System::setFramebufferResized() {
 VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
     VkVertexInputBindingDescription desc;
     desc.binding = 0;
-    desc.stride = sizeof(vgraphplay::gfx::Vertex);
+    desc.stride = sizeof(Vertex);
     desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
     return desc;
 }
@@ -1384,12 +1493,12 @@ std::array<VkVertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attrib
 
     descs[0].binding = 0;
     descs[0].location = 0;
-    descs[0].offset = offsetof(vgraphplay::gfx::Vertex, pos);
+    descs[0].offset = offsetof(Vertex, pos);
     descs[0].format = VK_FORMAT_R32G32_SFLOAT;
 
     descs[1].binding = 0;
     descs[1].location = 1;
-    descs[1].offset = offsetof(vgraphplay::gfx::Vertex, color);
+    descs[1].offset = offsetof(Vertex, color);
     descs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 
     return descs;

@@ -1335,7 +1335,7 @@ bool vgraphplay::gfx::System::createBuffer(VkDeviceSize size, VkBufferUsageFlags
     VkMemoryAllocateInfo mem_ai;
     mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mem_ai.pNext = nullptr;
-    mem_ai.allocationSize = size;
+    mem_ai.allocationSize = mem_reqs.size;
     mem_ai.memoryTypeIndex = memory_type;
 
     rslt = vkAllocateMemory(m_device, &mem_ai, nullptr, &memory);

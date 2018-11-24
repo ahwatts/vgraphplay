@@ -85,6 +85,9 @@ namespace vgraphplay {
             bool initVertexBuffer();
             void cleanupVertexBuffer();
 
+            bool initIndexBuffer();
+            void cleanupIndexBuffer();
+
             bool initCommandBuffers();
             void cleanupCommandBuffers();
             bool recordCommandBuffers();
@@ -110,8 +113,8 @@ namespace vgraphplay {
             std::vector<VkCommandBuffer> m_command_buffers;
 
             // Draw data.
-            VkBuffer m_vertex_buffer;
-            VkDeviceMemory m_vertex_buffer_memory;
+            VkBuffer m_vertex_buffer, m_index_buffer;
+            VkDeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
 
             // Presentation-related structures.
             VkSurfaceKHR m_surface;

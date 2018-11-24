@@ -13,6 +13,19 @@
 const Resource UNLIT_VERT_BYTECODE = LOAD_RESOURCE(unlit_vert_spv);
 const Resource UNLIT_FRAG_BYTECODE = LOAD_RESOURCE(unlit_frag_spv);
 
+const uint16_t NUM_RECTANGLE_VERTICES = 4;
+const vgraphplay::gfx::Vertex RECTANGLE_VERTICES[NUM_RECTANGLE_VERTICES] = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    { {0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+};
+
+const uint16_t NUM_RECTANGLE_INDICES = 6;
+const uint16_t RECTANGLE_INDICES[NUM_RECTANGLE_INDICES] = {
+    0, 1, 2, 2, 3, 0
+};
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT object_type,
@@ -93,6 +106,7 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initSemaphores();
     rv = rv && initCommandPool();
     rv = rv && initVertexBuffer();
+    rv = rv && initIndexBuffer();
     rv = rv && initCommandBuffers();
     rv = rv && recordCommandBuffers();
 
@@ -106,6 +120,7 @@ void vgraphplay::gfx::System::dispose() {
 
     cleanupCommandPool();
     cleanupVertexBuffer();
+    cleanupIndexBuffer();
     cleanupSemaphores();
     cleanupSwapchainFramebuffers();
     cleanupPipeline();
@@ -1118,7 +1133,7 @@ bool vgraphplay::gfx::System::initVertexBuffer() {
         return true;
     }
 
-    VkDeviceSize buffer_size = 3*sizeof(Vertex);
+    VkDeviceSize buffer_size = sizeof(RECTANGLE_VERTICES);
     VkBuffer staging_buffer;
     VkDeviceMemory staging_buffer_memory;
     bool rslt_b = createBuffer(buffer_size,
@@ -1128,7 +1143,7 @@ bool vgraphplay::gfx::System::initVertexBuffer() {
                                staging_buffer_memory);
 
     if (!rslt_b) {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer";
+        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer for vertex buffer";
         return false;
     }
 
@@ -1142,12 +1157,7 @@ bool vgraphplay::gfx::System::initVertexBuffer() {
     }
 
     Vertex *vertices = static_cast<Vertex*>(buffer_data);
-    vertices[0].pos = {0.0f, -0.5f};
-    vertices[0].color = {1.0f, 0.0f, 0.0f};
-    vertices[1].pos = {0.5f, 0.5f};
-    vertices[1].color = {0.0f, 1.0f, 0.0f};
-    vertices[2].pos = {-0.5f, 0.5f};
-    vertices[2].color = {0.0f, 0.0f, 1.0f};
+    std::copy(RECTANGLE_VERTICES, RECTANGLE_VERTICES + NUM_RECTANGLE_VERTICES, vertices);
 
     vkUnmapMemory(m_device, staging_buffer_memory);
     BOOST_LOG_TRIVIAL(trace) << "Unmapped staging buffer memory " << staging_buffer_memory;
@@ -1192,6 +1202,89 @@ void vgraphplay::gfx::System::cleanupVertexBuffer() {
             BOOST_LOG_TRIVIAL(trace) << "Freeing vertex buffer memory: " << m_vertex_buffer_memory;
             vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
             m_vertex_buffer_memory = VK_NULL_HANDLE;
+        }
+    }
+}
+
+bool vgraphplay::gfx::System::initIndexBuffer() {
+    if (m_index_buffer != VK_NULL_HANDLE && m_index_buffer_memory != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create index buffer.";
+        return false;
+    }
+
+    VkDeviceSize buffer_size = sizeof(RECTANGLE_INDICES);
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+
+    bool brslt = createBuffer(buffer_size,
+                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                              staging_buffer,
+                              staging_buffer_memory);
+    if (!brslt) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer for the index buffer";
+        return false;
+    }
+
+    void *buffer_data = nullptr;
+    VkResult rslt = vkMapMemory(m_device, staging_buffer_memory, 0, buffer_size, 0, &buffer_data);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Mapped memory for staging buffer for index buffer";
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to map memory for staging buffer for index buffer " << rslt;
+        return false;
+    }
+
+    uint16_t *indices = static_cast<uint16_t*>(buffer_data);
+    std::copy(RECTANGLE_INDICES, RECTANGLE_INDICES + NUM_RECTANGLE_INDICES, indices);
+
+    vkUnmapMemory(m_device, staging_buffer_memory);
+    BOOST_LOG_TRIVIAL(trace) << "Unmapped staging buffer memory for index buffer";
+
+    brslt = createBuffer(buffer_size,
+                         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                         m_index_buffer,
+                         m_index_buffer_memory);
+    if (!brslt) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create index buffer";
+        return false;
+    }
+
+    brslt = copyBuffer(staging_buffer, m_index_buffer, buffer_size);
+
+    if (!brslt) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to copy index data to index buffer";
+        return false;
+    }
+
+    BOOST_LOG_TRIVIAL(trace) << "Destroying staging buffer for index buffer";
+    vkDestroyBuffer(m_device, staging_buffer, nullptr);
+    staging_buffer = VK_NULL_HANDLE;
+    
+    BOOST_LOG_TRIVIAL(trace) << "Freeing staging buffer memory for index buffer";
+    vkFreeMemory(m_device, staging_buffer_memory, nullptr);
+    staging_buffer_memory = VK_NULL_HANDLE;
+
+    return true;
+}
+
+void vgraphplay::gfx::System::cleanupIndexBuffer() {
+    if (m_device != VK_NULL_HANDLE) {
+        if (m_index_buffer != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Destroying index buffer: " << m_index_buffer;
+            vkDestroyBuffer(m_device, m_index_buffer, nullptr);
+            m_index_buffer = VK_NULL_HANDLE;
+        }
+
+        if (m_index_buffer_memory != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Freeing index buffer memory: " << m_index_buffer_memory;
+            vkFreeMemory(m_device, m_index_buffer_memory, nullptr);
+            m_index_buffer_memory = VK_NULL_HANDLE;
         }
     }
 }
@@ -1270,7 +1363,8 @@ bool vgraphplay::gfx::System::recordCommandBuffers() {
         vkCmdBeginRenderPass(m_command_buffers[i], &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(m_command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
         vkCmdBindVertexBuffers(m_command_buffers[i], 0, 1, vertex_buffers, offsets);
-        vkCmdDraw(m_command_buffers[i], 3, 1, 0, 0);
+        vkCmdBindIndexBuffer(m_command_buffers[i], m_index_buffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(m_command_buffers[i], NUM_RECTANGLE_INDICES, 1, 0, 0, 0);
         vkCmdEndRenderPass(m_command_buffers[i]);
 
         rslt = vkEndCommandBuffer(m_command_buffers[i]);

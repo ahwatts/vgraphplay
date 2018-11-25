@@ -5,6 +5,7 @@
 
 #include <array>
 #include <vector>
+#include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
@@ -20,6 +21,12 @@ namespace vgraphplay {
 
             static VkVertexInputBindingDescription bindingDescription();
             static std::array<VkVertexInputAttributeDescription, 2> attributeDescription();
+        };
+
+        struct Transormations {
+            glm::mat4x4 model;
+            glm::mat4x4 view;
+            glm::mat4x4 projection;
         };
 
         struct ChosenDeviceInfo {
@@ -70,6 +77,9 @@ namespace vgraphplay {
             bool initPipelineLayout();
             void cleanupPipelineLayout();
 
+            bool initDescriptorSetLayout();
+            void cleanupDescriptorSetLayout();
+
             bool initPipeline();
             void cleanupPipeline();
 
@@ -87,6 +97,14 @@ namespace vgraphplay {
 
             bool initIndexBuffer();
             void cleanupIndexBuffer();
+
+            bool initUniformBuffers();
+            void cleanupUniformBuffers();
+            void updateUniformBuffer(uint32_t current_image);
+            bool initDescriptorPool();
+            void cleanupDescriptorPool();
+            bool initDescriptorSets();
+            void cleanupDescriptorSets();
 
             bool initCommandBuffers();
             void cleanupCommandBuffers();
@@ -114,7 +132,9 @@ namespace vgraphplay {
 
             // Draw data.
             VkBuffer m_vertex_buffer, m_index_buffer;
+            std::vector<VkBuffer> m_uniform_buffers;
             VkDeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
+            std::vector<VkDeviceMemory> m_uniform_buffers_memory;
 
             // Presentation-related structures.
             VkSurfaceKHR m_surface;
@@ -128,6 +148,9 @@ namespace vgraphplay {
             // Pipeline-related structures.
             VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
             VkPipelineLayout m_pipeline_layout;
+            VkDescriptorSetLayout m_descriptor_set_layout;
+            VkDescriptorPool m_descriptor_pool;
+            std::vector<VkDescriptorSet> m_descriptor_sets;
             VkRenderPass m_render_pass;
             VkPipeline m_pipeline;
             std::vector<VkFramebuffer> m_swapchain_framebuffers;

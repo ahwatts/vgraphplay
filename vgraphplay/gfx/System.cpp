@@ -1,9 +1,13 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
+#include <chrono>
 #include <set>
 #include <vector>
 
 #include <boost/log/trivial.hpp>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "../vulkan.h"
 
@@ -66,7 +70,11 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_command_pool{VK_NULL_HANDLE},
       m_command_buffers{},
       m_vertex_buffer{VK_NULL_HANDLE},
+      m_index_buffer{VK_NULL_HANDLE},
+      m_uniform_buffers{},
       m_vertex_buffer_memory{VK_NULL_HANDLE},
+      m_index_buffer_memory{VK_NULL_HANDLE},
+      m_uniform_buffers_memory{},
       m_surface{VK_NULL_HANDLE},
       m_swapchain{VK_NULL_HANDLE},
       m_swapchain_images{},
@@ -77,6 +85,9 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_vertex_shader_module{VK_NULL_HANDLE},
       m_fragment_shader_module{VK_NULL_HANDLE},
       m_pipeline_layout{VK_NULL_HANDLE},
+      m_descriptor_set_layout{VK_NULL_HANDLE},
+      m_descriptor_pool{VK_NULL_HANDLE},
+      m_descriptor_sets{},
       m_render_pass{VK_NULL_HANDLE},
       m_pipeline{VK_NULL_HANDLE},
       m_swapchain_framebuffers{},
@@ -101,12 +112,15 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initShaderModules();
     rv = rv && initRenderPass();
     rv = rv && initPipelineLayout();
+    rv = rv && initDescriptorSetLayout();
     rv = rv && initPipeline();
     rv = rv && initSwapchainFramebuffers();
     rv = rv && initSemaphores();
     rv = rv && initCommandPool();
     rv = rv && initVertexBuffer();
     rv = rv && initIndexBuffer();
+    rv = rv && initUniformBuffers();
+    rv = rv && initDescriptorPool();
     rv = rv && initCommandBuffers();
     rv = rv && recordCommandBuffers();
 
@@ -119,11 +133,14 @@ void vgraphplay::gfx::System::dispose() {
     }
 
     cleanupCommandPool();
+    cleanupDescriptorPool();
     cleanupVertexBuffer();
     cleanupIndexBuffer();
+    cleanupUniformBuffers();
     cleanupSemaphores();
     cleanupSwapchainFramebuffers();
     cleanupPipeline();
+    cleanupDescriptorSetLayout();
     cleanupPipelineLayout();
     cleanupRenderPass();
     cleanupShaderModules();
@@ -824,6 +841,48 @@ void vgraphplay::gfx::System::cleanupPipelineLayout() {
     }
 }
 
+bool vgraphplay::gfx::System::initDescriptorSetLayout() {
+    if (m_descriptor_set_layout != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Unable to create descriptor set layout.";
+        return false;
+    }
+
+    VkDescriptorSetLayoutBinding ubo_binding;
+    ubo_binding.binding = 0;
+    ubo_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    ubo_binding.descriptorCount = 1;
+    ubo_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    ubo_binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo dsl_ci;
+    dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dsl_ci.pNext = nullptr;
+    dsl_ci.flags = 0;
+    dsl_ci.bindingCount = 1;
+    dsl_ci.pBindings = &ubo_binding;
+
+    VkResult rslt = vkCreateDescriptorSetLayout(m_device, &dsl_ci, nullptr, &m_descriptor_set_layout);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created descriptor set layout: " << m_descriptor_set_layout;
+        return true;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating descriptor set layout " << rslt;
+        return false;
+    }
+}
+
+void vgraphplay::gfx::System::cleanupDescriptorSetLayout() {
+    if (m_device != VK_NULL_HANDLE && m_descriptor_set_layout != VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(trace) << "Destroying descriptor set layout: " << m_descriptor_set_layout;
+        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
+        m_descriptor_set_layout = VK_NULL_HANDLE;
+    }
+}
+
 bool vgraphplay::gfx::System::initPipeline() {
     if (m_pipeline != VK_NULL_HANDLE) {
         return true;
@@ -1289,6 +1348,124 @@ void vgraphplay::gfx::System::cleanupIndexBuffer() {
     }
 }
 
+bool vgraphplay::gfx::System::initUniformBuffers() {
+    if (m_uniform_buffers.size() > 0 && m_uniform_buffers_memory.size() > 0) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Unable to create uniform buffers.";
+        return false;
+    }
+
+    int num_buffers = m_swapchain_framebuffers.size();
+    VkDeviceSize buffer_size = sizeof(Transormations);
+    m_uniform_buffers.resize(num_buffers, VK_NULL_HANDLE);
+    m_uniform_buffers_memory.resize(num_buffers, VK_NULL_HANDLE);
+    bool brslt = false;
+    for (int i = 0; i < num_buffers; ++i) {
+        brslt = createBuffer(buffer_size,
+                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                             m_uniform_buffers[i],
+                             m_uniform_buffers_memory[i]);
+        if (!brslt) {
+            BOOST_LOG_TRIVIAL(error) << "Unable to create uniform buffer";
+            return false;
+        }
+    }
+
+    return false;
+}
+
+void vgraphplay::gfx::System::cleanupUniformBuffers() {
+    if (m_device != VK_NULL_HANDLE) {
+        for (const auto &buffer : m_uniform_buffers) {
+            if (buffer != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Destroying uniform buffer: " << buffer;
+                vkDestroyBuffer(m_device, buffer, nullptr);
+            }
+        }
+        m_uniform_buffers.clear();
+
+        for (const auto &memory : m_uniform_buffers_memory) {
+            if (memory != VK_NULL_HANDLE) {
+                BOOST_LOG_TRIVIAL(trace) << "Freeing uniform buffer memory: " << memory;
+                vkFreeMemory(m_device, memory, nullptr);
+            }
+        }
+        m_uniform_buffers_memory.clear();
+    }
+}
+
+
+void vgraphplay::gfx::System::updateUniformBuffer(uint32_t current_image) {
+    static auto start_time = std::chrono::high_resolution_clock::now();
+    auto current_time = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
+    Transormations xform{};
+
+    xform.model = glm::rotate(glm::mat4x4{1.0f}, time * glm::radians(90.0f), glm::vec3{0.0f, 0.0f, 1.0f});
+    xform.view = glm::lookAt(glm::vec3{2.0f, 2.0f, 2.0f}, glm::vec3{0.0f, 0.0f, 0.0f}, glm::vec3{0.0f, 0.0f, 1.0f});
+    xform.projection = glm::perspective(glm::radians(45.0f), m_swapchain_extent.width / static_cast<float>(m_swapchain_extent.height), 0.1f, 10.0f);
+    xform.projection[1][1] *= -1;
+
+    void *data{nullptr};
+    vkMapMemory(m_device, m_uniform_buffers_memory[current_image], 0, sizeof(Transormations), 0, &data);
+    Transormations *buf_xform = static_cast<Transormations*>(data);
+    std::copy(&xform, &xform + 1, buf_xform);
+    vkUnmapMemory(m_device, m_uniform_buffers_memory[current_image]);
+}
+
+
+bool vgraphplay::gfx::System::initDescriptorPool() {
+    if (m_descriptor_pool != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        return false;
+    }    
+    
+    VkDescriptorPoolSize dpsz;
+    dpsz.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dpsz.descriptorCount = m_swapchain_images.size();
+
+    VkDescriptorPoolCreateInfo dp_ci;
+    dp_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    dp_ci.pNext = nullptr;
+    dp_ci.flags = 0;
+    dp_ci.poolSizeCount = 1;
+    dp_ci.pPoolSizes = &dpsz;
+    dp_ci.maxSets = m_swapchain_images.size();
+
+    VkResult rslt = vkCreateDescriptorPool(m_device, &dp_ci, nullptr, &m_descriptor_pool);
+    if (rslt != VK_SUCCESS) {
+        return false;
+    }
+}
+
+void vgraphplay::gfx::System::cleanupDescriptorPool() {
+    if (m_device != VK_NULL_HANDLE && m_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
+        m_descriptor_pool = VK_NULL_HANDLE;
+    }
+}
+
+
+bool vgraphplay::gfx::System::initDescriptorSets() {
+    std::vector<VkDescriptorSetLayout> layouts{m_swapchain_images.size(), m_descriptor_set_layout};
+    VkDescriptorSetAllocateInfo ds_ai;
+    ds_ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ds_ai.pNext = nullptr;
+    ds_ai.descriptorPool = m_descriptor_pool;
+    ds_ai.descriptorSetCount = m_swapchain_images.size();
+    ds_ai.pSetLayouts = layouts.data();
+}
+
+void vgraphplay::gfx::System::cleanupDescriptorSets() {
+}
+
 bool vgraphplay::gfx::System::initCommandBuffers() {
     if (m_command_buffers.size() > 0) {
         return true;
@@ -1536,6 +1713,8 @@ void vgraphplay::gfx::System::drawFrame() {
         BOOST_LOG_TRIVIAL(error) << "Error acquiring next swapchain image: " << rslt;
         return;
     }
+
+    updateUniformBuffer(image_index);
 
     VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     VkSubmitInfo si;

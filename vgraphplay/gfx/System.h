@@ -16,7 +16,7 @@
 namespace vgraphplay {
     namespace gfx {
         struct Vertex {
-            glm::vec2 pos;
+            glm::vec3 pos;
             glm::vec3 color;
 
             static VkVertexInputBindingDescription bindingDescription();
@@ -92,6 +92,9 @@ namespace vgraphplay {
             bool initCommandPool();
             void cleanupCommandPool();
 
+            bool initTextureImage();
+            void cleanupTextureImage();
+
             bool initVertexBuffer();
             void cleanupVertexBuffer();
 
@@ -110,9 +113,22 @@ namespace vgraphplay {
             void cleanupCommandBuffers();
             bool recordCommandBuffers();
 
-            bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
+            // bool initDepthResources();
+            // void cleanupDepthResources();
+            // VkFormat chooseDepthFormat();
+
             uint32_t chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags mem_props);
+            // VkFormat chooseFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+
+            bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
+            bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
+            
             bool copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
+            bool copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height);
+            bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+            
+            VkCommandBuffer beginOneTimeCommands();
+            bool endOneTimeCommands(VkCommandBuffer commands);
 
             GLFWwindow *m_window;
 
@@ -135,6 +151,8 @@ namespace vgraphplay {
             std::vector<VkBuffer> m_uniform_buffers;
             VkDeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
             std::vector<VkDeviceMemory> m_uniform_buffers_memory;
+            VkImage m_texture_image;
+            VkDeviceMemory m_texture_image_memory;
 
             // Presentation-related structures.
             VkSurfaceKHR m_surface;
@@ -144,6 +162,9 @@ namespace vgraphplay {
             VkSurfaceFormatKHR m_swapchain_format;
             VkExtent2D m_swapchain_extent;
             bool m_framebuffer_resized;
+            VkImage m_depth_image;
+            VkDeviceMemory m_depth_image_memory;
+            VkImageView m_depth_image_view;
 
             // Pipeline-related structures.
             VkShaderModule m_vertex_shader_module, m_fragment_shader_module;

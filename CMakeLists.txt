@@ -38,12 +38,14 @@ find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 
 add_subdirectory(vendor/embed-resource)
+add_subdirectory(vendor/stb)
 
 compile_spirv(SPIRV_SHADERS
   shaders/unlit.frag
   shaders/unlit.vert)
 
 embed_resources(EMBEDDED_SHADERS ${SPIRV_SHADERS})
+embed_resources(EMBEDDED_TEXTURES textures/warren.jpg)
 
 add_executable(vgraphplay
   vgraphplay/Application.cpp
@@ -55,7 +57,8 @@ add_executable(vgraphplay
   vgraphplay/VulkanExt.cpp
   vgraphplay/VulkanOutput.cpp
   vgraphplay/vgraphplay.cpp
-  ${EMBEDDED_SHADERS})
+  ${EMBEDDED_SHADERS}
+  ${EMBEDDED_TEXTURES})
 target_compile_features(vgraphplay PUBLIC cxx_std_11)
 target_include_directories(vgraphplay PUBLIC vendor/embed-resource)
 target_link_libraries(vgraphplay
@@ -64,7 +67,8 @@ target_link_libraries(vgraphplay
   Boost::filesystem
   Vulkan::Vulkan
   glfw
-  glm)
+  glm
+  stb)
 
 if(CMAKE_COMPILER_IS_GNUCXX)
   target_compile_options(vgraphplay PUBLIC "-Wall" "-Og" "-pg" "-ggdb")

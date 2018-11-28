@@ -6,8 +6,12 @@
 
 #include <boost/log/trivial.hpp>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 #include "../vulkan.h"
 
@@ -17,17 +21,25 @@
 const Resource UNLIT_VERT_BYTECODE = LOAD_RESOURCE(unlit_vert_spv);
 const Resource UNLIT_FRAG_BYTECODE = LOAD_RESOURCE(unlit_frag_spv);
 
-const uint16_t NUM_RECTANGLE_VERTICES = 4;
+const Resource WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
+
+const uint16_t NUM_RECTANGLE_VERTICES = 8;
 const vgraphplay::gfx::Vertex RECTANGLE_VERTICES[NUM_RECTANGLE_VERTICES] = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    { {0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
+    {{ 0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+    {{ 0.5f,  0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f,  0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
 };
 
-const uint16_t NUM_RECTANGLE_INDICES = 6;
+const uint16_t NUM_RECTANGLE_INDICES = 12;
 const uint16_t RECTANGLE_INDICES[NUM_RECTANGLE_INDICES] = {
-    0, 1, 2, 2, 3, 0
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4,
 };
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -75,6 +87,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_vertex_buffer_memory{VK_NULL_HANDLE},
       m_index_buffer_memory{VK_NULL_HANDLE},
       m_uniform_buffers_memory{},
+      m_texture_image{VK_NULL_HANDLE},
+      m_texture_image_memory{VK_NULL_HANDLE},
       m_surface{VK_NULL_HANDLE},
       m_swapchain{VK_NULL_HANDLE},
       m_swapchain_images{},
@@ -82,6 +96,9 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_swapchain_format{VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
       m_swapchain_extent{0, 0},
       m_framebuffer_resized{false},
+      m_depth_image{VK_NULL_HANDLE},
+      m_depth_image_memory{VK_NULL_HANDLE},
+      m_depth_image_view{VK_NULL_HANDLE},
       m_vertex_shader_module{VK_NULL_HANDLE},
       m_fragment_shader_module{VK_NULL_HANDLE},
       m_pipeline_layout{VK_NULL_HANDLE},
@@ -117,6 +134,7 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initSwapchainFramebuffers();
     rv = rv && initSemaphores();
     rv = rv && initCommandPool();
+    rv = rv && initTextureImage();
     rv = rv && initVertexBuffer();
     rv = rv && initIndexBuffer();
     rv = rv && initUniformBuffers();
@@ -134,10 +152,6 @@ void vgraphplay::gfx::System::dispose() {
     }
 
     cleanupCommandPool();
-    cleanupDescriptorPool();
-    cleanupVertexBuffer();
-    cleanupIndexBuffer();
-    cleanupUniformBuffers();
     cleanupSemaphores();
     cleanupSwapchainFramebuffers();
     cleanupPipeline();
@@ -146,6 +160,11 @@ void vgraphplay::gfx::System::dispose() {
     cleanupRenderPass();
     cleanupShaderModules();
     cleanupSwapchain();
+    cleanupDescriptorPool();
+    cleanupUniformBuffers();
+    cleanupIndexBuffer();
+    cleanupVertexBuffer();
+    cleanupTextureImage();
     cleanupDevice();
     cleanupSurface();
     cleanupDebugCallback();
@@ -1186,6 +1205,145 @@ void vgraphplay::gfx::System::cleanupCommandPool() {
     }
 }
 
+// bool vgraphplay::gfx::System::initDepthResources() {
+//     return false;
+// }
+
+// void vgraphplay::gfx::System::cleanupDepthResources() {
+//     if (m_device != VK_NULL_HANDLE) {
+//         if (m_depth_image_view != VK_NULL_HANDLE) {
+//             BOOST_LOG_TRIVIAL(trace) << "Destroying depth image view: " << m_depth_image_view;
+//             vkDestroyImageView(m_device, m_depth_image_view, nullptr);
+//             m_depth_image_view = VK_NULL_HANDLE;
+//         }
+
+//         if (m_depth_image != VK_NULL_HANDLE) {
+//             BOOST_LOG_TRIVIAL(trace) << "Destroying depth image: " << m_depth_image;
+//             vkDestroyImage(m_device, m_depth_image, nullptr);
+//             m_depth_image = VK_NULL_HANDLE;
+//         }
+
+//         if (m_depth_image_memory != VK_NULL_HANDLE) {
+//             BOOST_LOG_TRIVIAL(trace) << "Freeing depth image memory: " << m_depth_image_memory;
+//             vkFreeMemory(m_device, m_depth_image_memory, nullptr);
+//             m_depth_image_memory = VK_NULL_HANDLE;
+//         }
+//     }
+// }
+
+// VkFormat vgraphplay::gfx::System::chooseDepthFormat() {
+//     return chooseFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+//                         VK_IMAGE_TILING_OPTIMAL,
+//                         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+// }
+
+bool vgraphplay::gfx::System::initTextureImage() {
+    if (m_texture_image != VK_NULL_HANDLE && m_texture_image_memory != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create texture image";
+        return false;
+    }
+
+    int tex_width, tex_height, tex_channels;
+    stbi_uc *pixels = stbi_load_from_memory(WARREN_TEXTURE.begin(), WARREN_TEXTURE.size(),
+                                            &tex_width, &tex_height, &tex_channels,
+                                            STBI_rgb_alpha);
+    VkDeviceSize tex_size = tex_width * tex_height * 4;
+
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+    bool brslt = createBuffer(tex_size,
+                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                              staging_buffer,
+                              staging_buffer_memory);
+
+    if (!brslt) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer for texture image";
+        return false;
+    }
+
+    void *data;
+    VkResult rslt = vkMapMemory(m_device, staging_buffer_memory, 0, tex_size, 0, &data);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Mapped memory for staging buffer for texture image: " << staging_buffer_memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to map memory for staging buffer for texture image "<< rslt;
+        return false;
+    }
+
+    std::memcpy(data, pixels, static_cast<size_t>(tex_size));
+    vkUnmapMemory(m_device, staging_buffer_memory);
+    BOOST_LOG_TRIVIAL(trace) << "Unmapped memory for staging buffer for texture image";
+    stbi_image_free(pixels);
+
+    brslt = createImage(static_cast<uint32_t>(tex_width), static_cast<uint32_t>(tex_height),
+                        VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        m_texture_image, m_texture_image_memory);
+    if (brslt) {
+        BOOST_LOG_TRIVIAL(trace) << "Created texture image " << m_texture_image << " with memory " << m_texture_image_memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create texture image";
+        return false;
+    }
+
+    brslt = transitionImageLayout(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM,
+                                  VK_IMAGE_LAYOUT_UNDEFINED,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    if (brslt) {
+        BOOST_LOG_TRIVIAL(trace) << "Transitioned texture image " << m_texture_image << " layout for transfer";
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to transition image layout";
+        return false;
+    }
+
+    brslt = copyBufferToImage(staging_buffer, m_texture_image, tex_width, tex_height);
+    if (brslt) {
+        BOOST_LOG_TRIVIAL(trace) << "Copied staging buffer " << staging_buffer << " to texture image " << m_texture_image;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to copy staging buffer to texture image";
+        return false;
+    }
+
+    brslt = transitionImageLayout(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    if (brslt) {
+        BOOST_LOG_TRIVIAL(trace) << "Transitioned texture image " << m_texture_image << " layout for sampling";
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to transition image layout for sampling";
+        return false;
+    }
+
+    vkDestroyBuffer(m_device, staging_buffer, nullptr);
+    BOOST_LOG_TRIVIAL(trace) << "Destroyed staging buffer for texture image";
+    vkFreeMemory(m_device, staging_buffer_memory, nullptr);
+    BOOST_LOG_TRIVIAL(trace) << "Freed staging buffer memory for texture image";
+
+    return true;
+}
+
+void vgraphplay::gfx::System::cleanupTextureImage() {
+    if (m_device != VK_NULL_HANDLE) {
+        if (m_texture_image != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Destroying texture image: " << m_texture_image;
+            vkDestroyImage(m_device, m_texture_image, nullptr);
+            m_texture_image = VK_NULL_HANDLE;
+        }
+
+        if (m_texture_image_memory != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Freeing texture image memory: " << m_texture_image_memory;
+            vkFreeMemory(m_device, m_texture_image_memory, nullptr);
+            m_texture_image_memory = VK_NULL_HANDLE;
+        }
+    }
+}
+
 bool vgraphplay::gfx::System::initVertexBuffer() {
     if (m_vertex_buffer != VK_NULL_HANDLE &&
         m_vertex_buffer_memory != VK_NULL_HANDLE)
@@ -1457,7 +1615,6 @@ void vgraphplay::gfx::System::cleanupDescriptorPool() {
     }
 }
 
-
 bool vgraphplay::gfx::System::initDescriptorSets() {
     if (m_descriptor_sets.size() > 0) {
         return true;
@@ -1621,6 +1778,21 @@ uint32_t vgraphplay::gfx::System::chooseMemoryTypeIndex(uint32_t type_filter, Vk
     return std::numeric_limits<uint32_t>::max();
 }
 
+// VkFormat vgraphplay::gfx::System::chooseFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+//     for (VkFormat format : candidates) {
+//         VkFormatProperties props;
+//         vkGetPhysicalDeviceFormatProperties(m_physical_device, format, &props);
+
+//         if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+//             return format;
+//         } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+//             return format;
+//         }
+//     }
+
+//     return VK_FORMAT_UNDEFINED;
+// }
+
 bool vgraphplay::gfx::System::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory) {
     if (m_device == VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(error) << "Device has not been initialized. Cannot create buffer";
@@ -1677,7 +1849,141 @@ bool vgraphplay::gfx::System::createBuffer(VkDeviceSize size, VkBufferUsageFlags
     }
 }
 
+bool vgraphplay::gfx::System::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory) {
+    VkImageCreateInfo img_ci;
+    img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    img_ci.pNext = nullptr;
+    img_ci.flags = 0;
+    img_ci.imageType = VK_IMAGE_TYPE_2D;
+    img_ci.format = format;
+    img_ci.extent.width = width;
+    img_ci.extent.height = height;
+    img_ci.extent.depth = 1;
+    img_ci.mipLevels = 1;
+    img_ci.arrayLayers = 1;
+    img_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    img_ci.tiling = tiling;
+    img_ci.usage = usage;
+    img_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    img_ci.queueFamilyIndexCount = 0;
+    img_ci.pQueueFamilyIndices = nullptr;
+    img_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkResult rslt = vkCreateImage(m_device, &img_ci, nullptr, &image);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created image: " << image;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create image " << rslt;
+        return false;
+    }
+
+    VkMemoryRequirements mem_reqs;
+    vkGetImageMemoryRequirements(m_device, image, &mem_reqs);
+
+    VkMemoryAllocateInfo mem_ai;
+    mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mem_ai.pNext = nullptr;
+    mem_ai.memoryTypeIndex = chooseMemoryTypeIndex(mem_reqs.memoryTypeBits, properties);
+    mem_ai.allocationSize = mem_reqs.size;
+
+    rslt = vkAllocateMemory(m_device, &mem_ai, nullptr, &memory);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Allocated memory for image: " << memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to allocate memory for image " << rslt;
+        return false;
+    }
+
+    rslt = vkBindImageMemory(m_device, image, memory, 0);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Bound memory " << memory << " to image " << image;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to bind memory to image " << rslt;
+        return false;
+    }
+
+    return true;
+}
+
 bool vgraphplay::gfx::System::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) {
+    VkBufferCopy region;
+    region.srcOffset = 0;
+    region.dstOffset = 0;
+    region.size = size;
+
+    VkCommandBuffer xfer_cb = beginOneTimeCommands();
+    if (xfer_cb == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    vkCmdCopyBuffer(xfer_cb, src, dst, 1, &region);
+
+    return endOneTimeCommands(xfer_cb);
+}
+
+bool vgraphplay::gfx::System::copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height) {
+    VkCommandBuffer cb = beginOneTimeCommands();
+    if (cb == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    VkBufferImageCopy bi_cp;
+    bi_cp.bufferOffset = 0;
+    bi_cp.bufferRowLength = 0;
+    bi_cp.bufferImageHeight = 0;
+    bi_cp.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    bi_cp.imageSubresource.mipLevel = 0;
+    bi_cp.imageSubresource.layerCount = 1;
+    bi_cp.imageSubresource.baseArrayLayer = 0;
+    bi_cp.imageOffset = { 0, 0, 0 };
+    bi_cp.imageExtent = { width, height, 1 };
+
+    vkCmdCopyBufferToImage(cb, src, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bi_cp);
+
+    return endOneTimeCommands(cb);
+}
+
+bool vgraphplay::gfx::System::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) {
+    VkCommandBuffer cb = beginOneTimeCommands();
+    if (cb == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    VkImageMemoryBarrier barrier;
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = nullptr;
+    barrier.oldLayout = old_layout;
+    barrier.newLayout = new_layout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    VkPipelineStageFlags src_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    VkPipelineStageFlags dst_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+    if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+
+    vkCmdPipelineBarrier(cb, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    return endOneTimeCommands(cb);
+}
+
+VkCommandBuffer vgraphplay::gfx::System::beginOneTimeCommands() {
     VkCommandBufferAllocateInfo cb_ai;
     cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     cb_ai.pNext = nullptr;
@@ -1685,13 +1991,13 @@ bool vgraphplay::gfx::System::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSiz
     cb_ai.commandPool = m_command_pool;
     cb_ai.commandBufferCount = 1;
 
-    VkCommandBuffer xfer_cb;
-    VkResult rslt = vkAllocateCommandBuffers(m_device, &cb_ai, &xfer_cb);
+    VkCommandBuffer cb_rv{VK_NULL_HANDLE};
+    VkResult rslt = vkAllocateCommandBuffers(m_device, &cb_ai, &cb_rv);
     if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Allocated command buffer for buffer copy: " << xfer_cb;
+        BOOST_LOG_TRIVIAL(trace) << "Allocated command buffer: " << cb_rv;
     } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to allocate command buffer for buffer copy " << rslt;
-        return false;
+        BOOST_LOG_TRIVIAL(error) << "Unable to allocate command buffer " << rslt;
+        return VK_NULL_HANDLE;
     }
 
     VkCommandBufferBeginInfo cb_bi;
@@ -1700,16 +2006,15 @@ bool vgraphplay::gfx::System::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSiz
     cb_bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     cb_bi.pInheritanceInfo = nullptr;
 
-    VkBufferCopy region;
-    region.srcOffset = 0;
-    region.dstOffset = 0;
-    region.size = size;
+    vkBeginCommandBuffer(cb_rv, &cb_bi);
 
-    vkBeginCommandBuffer(xfer_cb, &cb_bi);
-    vkCmdCopyBuffer(xfer_cb, src, dst, 1, &region);
-    rslt = vkEndCommandBuffer(xfer_cb);
+    return cb_rv;
+}
+
+bool vgraphplay::gfx::System::endOneTimeCommands(VkCommandBuffer commands) {
+    VkResult rslt = vkEndCommandBuffer(commands);
     if (rslt != VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(error) << "Error recording command buffer for buffer copy " << rslt;
+        BOOST_LOG_TRIVIAL(error) << "Error ending recording to command buffer " << rslt;
         return false;
     }
 
@@ -1720,28 +2025,27 @@ bool vgraphplay::gfx::System::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSiz
     si.pWaitSemaphores = nullptr;
     si.pWaitDstStageMask = nullptr;
     si.commandBufferCount = 1;
-    si.pCommandBuffers = &xfer_cb;
+    si.pCommandBuffers = &commands;
     si.signalSemaphoreCount = 0;
     si.pSignalSemaphores = nullptr;
 
     rslt = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
     if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Submitted transfer command buffer for " << src << " to " << dst;
+        BOOST_LOG_TRIVIAL(trace) << "Submitted command buffer " << commands;
     } else {
-        BOOST_LOG_TRIVIAL(error) << "Failed to submit transfer command buffer " << rslt;
+        BOOST_LOG_TRIVIAL(error) << "Failed to submit command buffer " << rslt;
         return false;
     }
 
     vkQueueWaitIdle(m_graphics_queue);
     if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Finished transferring buffer " << src << " to " << dst;
+        BOOST_LOG_TRIVIAL(trace) << "Finished executing command buffer " << commands;
     } else {
-        BOOST_LOG_TRIVIAL(error) << "Error waiting for buffer transfer to complete " << rslt;
+        BOOST_LOG_TRIVIAL(error) << "Error waiting for command buffer to complete " << rslt;
         return false;
     }
 
-    vkFreeCommandBuffers(m_device, m_command_pool, 1, &xfer_cb);
-
+    vkFreeCommandBuffers(m_device, m_command_pool, 1, &commands);
     return true;
 }
 
@@ -1817,7 +2121,7 @@ std::array<VkVertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attrib
     descs[0].binding = 0;
     descs[0].location = 0;
     descs[0].offset = offsetof(Vertex, pos);
-    descs[0].format = VK_FORMAT_R32G32_SFLOAT;
+    descs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 
     descs[1].binding = 0;
     descs[1].location = 1;

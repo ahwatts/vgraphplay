@@ -89,6 +89,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_uniform_buffers_memory{},
       m_texture_image{VK_NULL_HANDLE},
       m_texture_image_memory{VK_NULL_HANDLE},
+      m_texture_image_view{VK_NULL_HANDLE},
       m_surface{VK_NULL_HANDLE},
       m_swapchain{VK_NULL_HANDLE},
       m_swapchain_images{},
@@ -135,6 +136,7 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initSemaphores();
     rv = rv && initCommandPool();
     rv = rv && initTextureImage();
+    rv = rv && initTextureImageView();
     rv = rv && initVertexBuffer();
     rv = rv && initIndexBuffer();
     rv = rv && initUniformBuffers();
@@ -164,6 +166,7 @@ void vgraphplay::gfx::System::dispose() {
     cleanupUniformBuffers();
     cleanupIndexBuffer();
     cleanupVertexBuffer();
+    cleanupTextureImageView();
     cleanupTextureImage();
     cleanupDevice();
     cleanupSurface();
@@ -606,29 +609,11 @@ bool vgraphplay::gfx::System::initSwapchain() {
 
     m_swapchain_image_views.resize(num_swapchain_images, VK_NULL_HANDLE);
     for (unsigned int i = 0; i < m_swapchain_images.size(); ++i) {
-        VkImageViewCreateInfo iv_ci;
-        iv_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        iv_ci.pNext = nullptr;
-        iv_ci.flags = 0;
-        iv_ci.image = m_swapchain_images[i];
-        iv_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        iv_ci.format = m_swapchain_format.format;
-        iv_ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iv_ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iv_ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iv_ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iv_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        iv_ci.subresourceRange.baseMipLevel = 0;
-        iv_ci.subresourceRange.levelCount = 1;
-        iv_ci.subresourceRange.baseArrayLayer = 0;
-        iv_ci.subresourceRange.layerCount = 1;
-
-        rslt = vkCreateImageView(m_device, &iv_ci, nullptr, &m_swapchain_image_views[i]);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Created swapchain image view " << i << ": " << m_swapchain_image_views[i];
+        m_swapchain_image_views[i] = createImageView(m_swapchain_images[i], m_swapchain_format.format);
+        if (m_swapchain_image_views[i] == VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Error creating swapchain image view " << i;
         } else {
-            BOOST_LOG_TRIVIAL(error) << "Error creating swapchain image view " << i << ": " << rslt;
-            return false;
+            BOOST_LOG_TRIVIAL(trace) << "Created swapchain image view " << i << ": " << m_swapchain_image_views[i];
         }
     }
 
@@ -1344,6 +1329,35 @@ void vgraphplay::gfx::System::cleanupTextureImage() {
     }
 }
 
+bool vgraphplay::gfx::System::initTextureImageView() {
+    if (m_texture_image_view != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE || m_texture_image == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Could not create texture image view.";
+        return false;
+    }
+
+    m_texture_image_view = createImageView(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM);
+    if (m_texture_image_view == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create texture image view";
+        return false;
+    } else {
+        BOOST_LOG_TRIVIAL(trace) << "Created texture image view: " << m_texture_image_view;
+    }
+
+    return true;
+}
+
+void vgraphplay::gfx::System::cleanupTextureImageView() {
+    if (m_device != VK_NULL_HANDLE && m_texture_image_view != VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(trace) << "Destroying texture image view: " << m_texture_image_view;
+        vkDestroyImageView(m_device, m_texture_image_view, nullptr);
+        m_texture_image_view = VK_NULL_HANDLE;
+    }
+}
+
 bool vgraphplay::gfx::System::initVertexBuffer() {
     if (m_vertex_buffer != VK_NULL_HANDLE &&
         m_vertex_buffer_memory != VK_NULL_HANDLE)
@@ -1903,6 +1917,36 @@ bool vgraphplay::gfx::System::createImage(uint32_t width, uint32_t height, VkFor
     }
 
     return true;
+}
+
+VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat format) {
+    VkImageViewCreateInfo iv_ci;
+    iv_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    iv_ci.pNext = nullptr;
+    iv_ci.flags = 0;
+    iv_ci.image = image;
+    iv_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    iv_ci.format = format;
+    iv_ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    iv_ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    iv_ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    iv_ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    iv_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    iv_ci.subresourceRange.baseMipLevel = 0;
+    iv_ci.subresourceRange.levelCount = 1;
+    iv_ci.subresourceRange.baseArrayLayer = 0;
+    iv_ci.subresourceRange.layerCount = 1;
+
+    VkImageView iv_rv;
+    VkResult rslt = vkCreateImageView(m_device, &iv_ci, nullptr, &iv_rv);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created image view: " << iv_rv;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating image view " << rslt;
+        return VK_NULL_HANDLE;
+    }
+
+    return iv_rv;
 }
 
 bool vgraphplay::gfx::System::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) {

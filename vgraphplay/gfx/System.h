@@ -93,7 +93,9 @@ namespace vgraphplay {
             void cleanupCommandPool();
 
             bool initTextureImage();
+            bool initTextureImageView();
             void cleanupTextureImage();
+            void cleanupTextureImageView();
 
             bool initVertexBuffer();
             void cleanupVertexBuffer();
@@ -122,6 +124,7 @@ namespace vgraphplay {
 
             bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
             bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
+            VkImageView createImageView(VkImage image, VkFormat format);
             
             bool copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
             bool copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height);
@@ -153,6 +156,7 @@ namespace vgraphplay {
             std::vector<VkDeviceMemory> m_uniform_buffers_memory;
             VkImage m_texture_image;
             VkDeviceMemory m_texture_image_memory;
+            VkImageView m_texture_image_view;
 
             // Presentation-related structures.
             VkSurfaceKHR m_surface;

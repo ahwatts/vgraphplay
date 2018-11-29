@@ -69,6 +69,10 @@ namespace vgraphplay {
 
             msg << std::endl << "  Physical device: (" << device << ") " << props;
 
+            // VkPhysicalDeviceFeatures features;
+            // vkGetPhysicalDeviceFeatures(device, &features);
+            // print the features of this device...
+
             uint32_t num_extensions;
             vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
             std::vector<VkExtensionProperties> extensions(num_extensions);

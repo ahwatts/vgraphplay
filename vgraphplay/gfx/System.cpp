@@ -25,15 +25,15 @@ const Resource WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
 
 const uint16_t NUM_RECTANGLE_VERTICES = 8;
 const vgraphplay::gfx::Vertex RECTANGLE_VERTICES[NUM_RECTANGLE_VERTICES] = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-    {{ 0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-    {{ 0.5f,  0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f,  0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 };
 
 const uint16_t NUM_RECTANGLE_INDICES = 12;
@@ -90,6 +90,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_texture_image{VK_NULL_HANDLE},
       m_texture_image_memory{VK_NULL_HANDLE},
       m_texture_image_view{VK_NULL_HANDLE},
+      m_texture_sampler{VK_NULL_HANDLE},
       m_surface{VK_NULL_HANDLE},
       m_swapchain{VK_NULL_HANDLE},
       m_swapchain_images{},
@@ -137,6 +138,7 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initCommandPool();
     rv = rv && initTextureImage();
     rv = rv && initTextureImageView();
+    rv = rv && initTextureSampler();
     rv = rv && initVertexBuffer();
     rv = rv && initIndexBuffer();
     rv = rv && initUniformBuffers();
@@ -166,6 +168,7 @@ void vgraphplay::gfx::System::dispose() {
     cleanupUniformBuffers();
     cleanupIndexBuffer();
     cleanupVertexBuffer();
+    cleanupTextureSampler();
     cleanupTextureImageView();
     cleanupTextureImage();
     cleanupDevice();
@@ -396,6 +399,9 @@ bool vgraphplay::gfx::System::initDevice() {
     std::vector<const char*> extension_names;
     extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
+    VkPhysicalDeviceFeatures device_features{};
+    device_features.samplerAnisotropy = VK_TRUE;
+
     VkDeviceCreateInfo device_ci;
     device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_ci.pNext = nullptr;
@@ -404,7 +410,7 @@ bool vgraphplay::gfx::System::initDevice() {
     device_ci.pQueueCreateInfos = queue_cis.data();
     device_ci.enabledLayerCount = 0;
     device_ci.ppEnabledLayerNames = nullptr;
-    device_ci.pEnabledFeatures = nullptr;
+    device_ci.pEnabledFeatures = &device_features;
     device_ci.enabledExtensionCount = (uint32_t)extension_names.size();
     device_ci.ppEnabledExtensionNames = extension_names.data();
 
@@ -436,6 +442,16 @@ vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(
     const uint32_t MAX_INT = std::numeric_limits<uint32_t>::max();
 
     for (auto &dev : devices) {
+        // Do we support the required properties & features?
+        // VkPhysicalDeviceProperties props;
+        VkPhysicalDeviceFeatures features;
+        // vkGetPhysicalDeviceProperties(dev, &props);
+        vkGetPhysicalDeviceFeatures(dev, &features);
+
+        if (features.samplerAnisotropy != VK_TRUE) {
+            continue;
+        }
+
         // Do we have queue families suitable for graphics / presentation?
         uint32_t graphics_queue = MAX_INT, present_queue = MAX_INT, num_queue_families = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
@@ -856,19 +872,28 @@ bool vgraphplay::gfx::System::initDescriptorSetLayout() {
         return false;
     }
 
-    VkDescriptorSetLayoutBinding ubo_binding;
-    ubo_binding.binding = 0;
-    ubo_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    ubo_binding.descriptorCount = 1;
-    ubo_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    ubo_binding.pImmutableSamplers = nullptr;
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+
+    // UBO binding.
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[0].pImmutableSamplers = nullptr;
+
+    // Sampler binding.
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo dsl_ci;
     dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     dsl_ci.pNext = nullptr;
     dsl_ci.flags = 0;
-    dsl_ci.bindingCount = 1;
-    dsl_ci.pBindings = &ubo_binding;
+    dsl_ci.bindingCount = static_cast<uint32_t>(bindings.size());
+    dsl_ci.pBindings = bindings.data();
 
     VkResult rslt = vkCreateDescriptorSetLayout(m_device, &dsl_ci, nullptr, &m_descriptor_set_layout);
     if (rslt == VK_SUCCESS) {
@@ -927,7 +952,7 @@ bool vgraphplay::gfx::System::initPipeline() {
     vert_in_ci.flags = 0;
     vert_in_ci.vertexBindingDescriptionCount = 1;
     vert_in_ci.pVertexBindingDescriptions = &bind_desc;
-    vert_in_ci.vertexAttributeDescriptionCount = 2;
+    vert_in_ci.vertexAttributeDescriptionCount = 3;
     vert_in_ci.pVertexAttributeDescriptions = attr_desc.data();
 
     VkPipelineInputAssemblyStateCreateInfo input_asm_ci;
@@ -1358,6 +1383,55 @@ void vgraphplay::gfx::System::cleanupTextureImageView() {
     }
 }
 
+bool vgraphplay::gfx::System::initTextureSampler() {
+    if (m_texture_sampler != VK_NULL_HANDLE) {
+        return true;
+    }
+
+    if (m_device == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create texture sampler.";
+        return false;
+    }
+
+    VkSamplerCreateInfo smp_ci;
+    smp_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    smp_ci.pNext = nullptr;
+    smp_ci.flags = 0;
+    smp_ci.magFilter = VK_FILTER_LINEAR;
+    smp_ci.minFilter = VK_FILTER_LINEAR;
+    smp_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    smp_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    smp_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    smp_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    smp_ci.mipLodBias = 0.0;
+    smp_ci.anisotropyEnable = VK_TRUE;
+    smp_ci.maxAnisotropy = 16.0;
+    smp_ci.compareEnable = VK_FALSE;
+    smp_ci.compareOp = VK_COMPARE_OP_ALWAYS;
+    smp_ci.minLod = 0.0;
+    smp_ci.maxLod = 0.0;
+    smp_ci.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    smp_ci.unnormalizedCoordinates = VK_FALSE;
+
+    VkResult rslt = vkCreateSampler(m_device, &smp_ci, nullptr, &m_texture_sampler);
+    if (rslt == VK_SUCCESS) {
+        BOOST_LOG_TRIVIAL(trace) << "Created texture sampler: " << m_texture_sampler;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create texture sampler " << rslt;
+        return false;
+    }
+
+    return true;
+}
+
+void vgraphplay::gfx::System::cleanupTextureSampler() {
+    if (m_device != VK_NULL_HANDLE && m_texture_sampler != VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(trace) << "Destroying texture sampler: " << m_texture_sampler;
+        vkDestroySampler(m_device, m_texture_sampler, nullptr);
+        m_texture_sampler = VK_NULL_HANDLE;
+    }
+}
+
 bool vgraphplay::gfx::System::initVertexBuffer() {
     if (m_vertex_buffer != VK_NULL_HANDLE &&
         m_vertex_buffer_memory != VK_NULL_HANDLE)
@@ -1599,16 +1673,18 @@ bool vgraphplay::gfx::System::initDescriptorPool() {
         return false;
     }
 
-    VkDescriptorPoolSize dpsz;
-    dpsz.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    dpsz.descriptorCount = m_swapchain_images.size();
+    std::array<VkDescriptorPoolSize, 2> pool_sizes{};
+    pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_sizes[0].descriptorCount = static_cast<uint32_t>(m_swapchain_images.size());
+    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    pool_sizes[1].descriptorCount = static_cast<uint32_t>(m_swapchain_images.size());
 
     VkDescriptorPoolCreateInfo dp_ci;
     dp_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     dp_ci.pNext = nullptr;
     dp_ci.flags = 0;
-    dp_ci.poolSizeCount = 1;
-    dp_ci.pPoolSizes = &dpsz;
+    dp_ci.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
+    dp_ci.pPoolSizes = pool_sizes.data();
     dp_ci.maxSets = m_swapchain_images.size();
 
     VkResult rslt = vkCreateDescriptorPool(m_device, &dp_ci, nullptr, &m_descriptor_pool);
@@ -1664,19 +1740,36 @@ bool vgraphplay::gfx::System::initDescriptorSets() {
         dbi.offset = 0;
         dbi.range = sizeof(Transormations);
 
-        VkWriteDescriptorSet wds;
-        wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        wds.pNext = nullptr;
-        wds.dstSet = m_descriptor_sets[i];
-        wds.dstBinding = 0;
-        wds.dstArrayElement = 0;
-        wds.descriptorCount = 1;
-        wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        wds.pBufferInfo = &dbi;
-        wds.pImageInfo = nullptr;
-        wds.pTexelBufferView = nullptr;
+        VkDescriptorImageInfo dii;
+        dii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        dii.imageView = m_texture_image_view;
+        dii.sampler = m_texture_sampler;
 
-        vkUpdateDescriptorSets(m_device, 1, &wds, 0, nullptr);
+        std::array<VkWriteDescriptorSet, 2> dsc_writes{};
+
+        dsc_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        dsc_writes[0].pNext = nullptr;
+        dsc_writes[0].dstSet = m_descriptor_sets[i];
+        dsc_writes[0].dstBinding = 0;
+        dsc_writes[0].dstArrayElement = 0;
+        dsc_writes[0].descriptorCount = 1;
+        dsc_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        dsc_writes[0].pBufferInfo = &dbi;
+        dsc_writes[0].pImageInfo = nullptr;
+        dsc_writes[0].pTexelBufferView = nullptr;
+
+        dsc_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        dsc_writes[1].pNext = nullptr;
+        dsc_writes[1].dstSet = m_descriptor_sets[i];
+        dsc_writes[1].dstBinding = 1;
+        dsc_writes[1].dstArrayElement = 0;
+        dsc_writes[1].descriptorCount = 1;
+        dsc_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        dsc_writes[1].pBufferInfo = nullptr;
+        dsc_writes[1].pImageInfo = &dii;
+        dsc_writes[1].pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(dsc_writes.size()), dsc_writes.data(), 0, nullptr);
         BOOST_LOG_TRIVIAL(trace) << "Updated descriptor set " << m_descriptor_sets[i];
     }
 
@@ -2159,8 +2252,8 @@ VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
     return desc;
 }
 
-std::array<VkVertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attributeDescription() {
-    std::array<VkVertexInputAttributeDescription, 2> descs{};
+std::array<VkVertexInputAttributeDescription, 3> vgraphplay::gfx::Vertex::attributeDescription() {
+    std::array<VkVertexInputAttributeDescription, 3> descs{};
 
     descs[0].binding = 0;
     descs[0].location = 0;
@@ -2171,6 +2264,11 @@ std::array<VkVertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attrib
     descs[1].location = 1;
     descs[1].offset = offsetof(Vertex, color);
     descs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+
+    descs[2].binding = 0;
+    descs[2].location = 2;
+    descs[2].offset = offsetof(Vertex, tex);
+    descs[2].format = VK_FORMAT_R32G32_SFLOAT;
 
     return descs;
 }

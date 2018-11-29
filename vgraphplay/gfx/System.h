@@ -18,9 +18,10 @@ namespace vgraphplay {
         struct Vertex {
             glm::vec3 pos;
             glm::vec3 color;
+            glm::vec2 tex;
 
             static VkVertexInputBindingDescription bindingDescription();
-            static std::array<VkVertexInputAttributeDescription, 2> attributeDescription();
+            static std::array<VkVertexInputAttributeDescription, 3> attributeDescription();
         };
 
         struct Transormations {
@@ -94,8 +95,10 @@ namespace vgraphplay {
 
             bool initTextureImage();
             bool initTextureImageView();
+            bool initTextureSampler();
             void cleanupTextureImage();
             void cleanupTextureImageView();
+            void cleanupTextureSampler();
 
             bool initVertexBuffer();
             void cleanupVertexBuffer();
@@ -157,6 +160,7 @@ namespace vgraphplay {
             VkImage m_texture_image;
             VkDeviceMemory m_texture_image_memory;
             VkImageView m_texture_image_view;
+            VkSampler m_texture_sampler;
 
             // Presentation-related structures.
             VkSurfaceKHR m_surface;

@@ -118,21 +118,22 @@ namespace vgraphplay {
             void cleanupCommandBuffers();
             bool recordCommandBuffers();
 
-            // bool initDepthResources();
-            // void cleanupDepthResources();
-            // VkFormat chooseDepthFormat();
+            bool initDepthResources();
+            void cleanupDepthResources();
+            VkFormat chooseDepthFormat();
 
             uint32_t chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags mem_props);
-            // VkFormat chooseFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+            VkFormat chooseFormat(const VkFormat *candidates, int num_candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+            bool hasStencilComponent(VkFormat format);
 
             bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
             bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
-            VkImageView createImageView(VkImage image, VkFormat format);
-            
+            VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
+
             bool copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
             bool copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height);
             bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
-            
+
             VkCommandBuffer beginOneTimeCommands();
             bool endOneTimeCommands(VkCommandBuffer commands);
 

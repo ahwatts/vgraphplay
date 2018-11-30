@@ -133,9 +133,10 @@ bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initDescriptorSetLayout();
     rv = rv && initPipelineLayout();
     rv = rv && initPipeline();
-    rv = rv && initSwapchainFramebuffers();
     rv = rv && initSemaphores();
     rv = rv && initCommandPool();
+    rv = rv && initDepthResources();
+    rv = rv && initSwapchainFramebuffers();
     rv = rv && initTextureImage();
     rv = rv && initTextureImageView();
     rv = rv && initTextureSampler();
@@ -171,6 +172,7 @@ void vgraphplay::gfx::System::dispose() {
     cleanupTextureSampler();
     cleanupTextureImageView();
     cleanupTextureImage();
+    cleanupDepthResources();
     cleanupDevice();
     cleanupSurface();
     cleanupDebugCallback();
@@ -195,11 +197,13 @@ void vgraphplay::gfx::System::recreateSwapchain() {
     cleanupPipelineLayout();
     cleanupRenderPass();
     cleanupSwapchain();
+    cleanupDepthResources();
 
     bool rv = initSwapchain();
     rv = rv && initRenderPass();
     rv = rv && initPipelineLayout();
     rv = rv && initPipeline();
+    rv = rv && initDepthResources();
     rv = rv && initSwapchainFramebuffers();
     rv = rv && initCommandBuffers();
     rv = rv && recordCommandBuffers();
@@ -625,7 +629,7 @@ bool vgraphplay::gfx::System::initSwapchain() {
 
     m_swapchain_image_views.resize(num_swapchain_images, VK_NULL_HANDLE);
     for (unsigned int i = 0; i < m_swapchain_images.size(); ++i) {
-        m_swapchain_image_views[i] = createImageView(m_swapchain_images[i], m_swapchain_format.format);
+        m_swapchain_image_views[i] = createImageView(m_swapchain_images[i], m_swapchain_format.format, VK_IMAGE_ASPECT_COLOR_BIT);
         if (m_swapchain_image_views[i] == VK_NULL_HANDLE) {
             BOOST_LOG_TRIVIAL(trace) << "Error creating swapchain image view " << i;
         } else {
@@ -710,20 +714,35 @@ bool vgraphplay::gfx::System::initRenderPass() {
         return false;
     }
 
-    VkAttachmentDescription color_att;
-    color_att.flags = 0;
-    color_att.format = m_swapchain_format.format;
-    color_att.samples = VK_SAMPLE_COUNT_1_BIT;
-    color_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    color_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    color_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    color_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    std::array<VkAttachmentDescription, 2> attachments{};
+
+    attachments[0].flags = 0;
+    attachments[0].format = m_swapchain_format.format;
+    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    attachments[1].flags = 0;
+    attachments[1].format = chooseDepthFormat();
+    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference color_ref;
     color_ref.attachment = 0;
     color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depth_ref;
+    depth_ref.attachment = 1;
+    depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription subpass;
     subpass.flags = 0;
@@ -733,7 +752,7 @@ bool vgraphplay::gfx::System::initRenderPass() {
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &color_ref;
     subpass.pResolveAttachments = nullptr;
-    subpass.pDepthStencilAttachment = nullptr;
+    subpass.pDepthStencilAttachment = &depth_ref;
     subpass.preserveAttachmentCount = 0;
     subpass.pPreserveAttachments = nullptr;
 
@@ -750,8 +769,8 @@ bool vgraphplay::gfx::System::initRenderPass() {
     rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     rp_ci.pNext = nullptr;
     rp_ci.flags = 0;
-    rp_ci.attachmentCount = 1;
-    rp_ci.pAttachments = &color_att;
+    rp_ci.attachmentCount = static_cast<uint32_t>(attachments.size());
+    rp_ci.pAttachments = attachments.data();
     rp_ci.subpassCount = 1;
     rp_ci.pSubpasses = &subpass;
     rp_ci.dependencyCount = 1;
@@ -1009,10 +1028,19 @@ bool vgraphplay::gfx::System::initPipeline() {
     msamp_ci.alphaToCoverageEnable = VK_FALSE;
     msamp_ci.alphaToOneEnable = VK_FALSE;
 
-    // VkPipelineDepthStencilStateCreateInfo depth_ci;
-    // depth_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    // depth_ci.pNext = nullptr;
-    // depth_ci.flags = 0;
+    VkPipelineDepthStencilStateCreateInfo depth_ci;
+    depth_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_ci.pNext = nullptr;
+    depth_ci.flags = 0;
+    depth_ci.depthTestEnable = VK_TRUE;
+    depth_ci.depthWriteEnable = VK_TRUE;
+    depth_ci.depthCompareOp = VK_COMPARE_OP_LESS;
+    depth_ci.depthBoundsTestEnable = VK_FALSE;
+    depth_ci.stencilTestEnable = VK_FALSE;
+    depth_ci.front = {};
+    depth_ci.back = {};
+    depth_ci.minDepthBounds = 0.0;
+    depth_ci.maxDepthBounds = 1.0;
 
     VkPipelineColorBlendAttachmentState blender;
     blender.blendEnable = VK_FALSE;
@@ -1054,7 +1082,7 @@ bool vgraphplay::gfx::System::initPipeline() {
     pipeline_ci.pViewportState = &vp_ci;
     pipeline_ci.pRasterizationState = &raster_ci;
     pipeline_ci.pMultisampleState = &msamp_ci;
-    pipeline_ci.pDepthStencilState = nullptr;
+    pipeline_ci.pDepthStencilState = &depth_ci;
     pipeline_ci.pColorBlendState = &blend_ci;
     pipeline_ci.pDynamicState = nullptr;
     pipeline_ci.layout = m_pipeline_layout;
@@ -1093,13 +1121,18 @@ bool vgraphplay::gfx::System::initSwapchainFramebuffers() {
 
     m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
     for (unsigned int i = 0; i < m_swapchain_image_views.size(); ++i) {
+        std::array<VkImageView, 2> attachments{
+            m_swapchain_image_views[i],
+            m_depth_image_view,
+        };
+
         VkFramebufferCreateInfo fb_ci;
         fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fb_ci.pNext = nullptr;
         fb_ci.flags = 0;
         fb_ci.renderPass = m_render_pass;
-        fb_ci.attachmentCount = 1;
-        fb_ci.pAttachments = &m_swapchain_image_views[i];
+        fb_ci.attachmentCount = attachments.size();
+        fb_ci.pAttachments = attachments.data();
         fb_ci.width = m_swapchain_extent.width;
         fb_ci.height = m_swapchain_extent.height;
         fb_ci.layers = 1;
@@ -1215,37 +1248,66 @@ void vgraphplay::gfx::System::cleanupCommandPool() {
     }
 }
 
-// bool vgraphplay::gfx::System::initDepthResources() {
-//     return false;
-// }
+bool vgraphplay::gfx::System::initDepthResources() {
+    VkFormat depth_format = chooseDepthFormat();
+    bool brslt = createImage(m_swapchain_extent.width, m_swapchain_extent.height,
+                depth_format,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                m_depth_image, m_depth_image_memory);
+    if (brslt) {
+        BOOST_LOG_TRIVIAL(trace) << "Created depth image: " << m_depth_image << " and memory: " << m_depth_image_memory;
+    } else {
+        BOOST_LOG_TRIVIAL(error) << "Error creating depth image";
+        return false;
+    }
 
-// void vgraphplay::gfx::System::cleanupDepthResources() {
-//     if (m_device != VK_NULL_HANDLE) {
-//         if (m_depth_image_view != VK_NULL_HANDLE) {
-//             BOOST_LOG_TRIVIAL(trace) << "Destroying depth image view: " << m_depth_image_view;
-//             vkDestroyImageView(m_device, m_depth_image_view, nullptr);
-//             m_depth_image_view = VK_NULL_HANDLE;
-//         }
+    m_depth_image_view = createImageView(m_depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+    if (m_depth_image_view == VK_NULL_HANDLE) {
+        BOOST_LOG_TRIVIAL(error) << "Error creating depth image view";
+        return false;
+    } else {
+        BOOST_LOG_TRIVIAL(trace) << "Created depth image view: " << m_depth_image_view;
+    }
 
-//         if (m_depth_image != VK_NULL_HANDLE) {
-//             BOOST_LOG_TRIVIAL(trace) << "Destroying depth image: " << m_depth_image;
-//             vkDestroyImage(m_device, m_depth_image, nullptr);
-//             m_depth_image = VK_NULL_HANDLE;
-//         }
+    transitionImageLayout(m_depth_image, depth_format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-//         if (m_depth_image_memory != VK_NULL_HANDLE) {
-//             BOOST_LOG_TRIVIAL(trace) << "Freeing depth image memory: " << m_depth_image_memory;
-//             vkFreeMemory(m_device, m_depth_image_memory, nullptr);
-//             m_depth_image_memory = VK_NULL_HANDLE;
-//         }
-//     }
-// }
+    return true;
+}
 
-// VkFormat vgraphplay::gfx::System::chooseDepthFormat() {
-//     return chooseFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
-//                         VK_IMAGE_TILING_OPTIMAL,
-//                         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-// }
+void vgraphplay::gfx::System::cleanupDepthResources() {
+    if (m_device != VK_NULL_HANDLE) {
+        if (m_depth_image_view != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Destroying depth image view: " << m_depth_image_view;
+            vkDestroyImageView(m_device, m_depth_image_view, nullptr);
+            m_depth_image_view = VK_NULL_HANDLE;
+        }
+
+        if (m_depth_image != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Destroying depth image: " << m_depth_image;
+            vkDestroyImage(m_device, m_depth_image, nullptr);
+            m_depth_image = VK_NULL_HANDLE;
+        }
+
+        if (m_depth_image_memory != VK_NULL_HANDLE) {
+            BOOST_LOG_TRIVIAL(trace) << "Freeing depth image memory: " << m_depth_image_memory;
+            vkFreeMemory(m_device, m_depth_image_memory, nullptr);
+            m_depth_image_memory = VK_NULL_HANDLE;
+        }
+    }
+}
+
+VkFormat vgraphplay::gfx::System::chooseDepthFormat() {
+    std::array<VkFormat, 3> candidates{
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+    };
+    return chooseFormat(candidates.data(), candidates.size(),
+                        VK_IMAGE_TILING_OPTIMAL,
+                        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+}
 
 bool vgraphplay::gfx::System::initTextureImage() {
     if (m_texture_image != VK_NULL_HANDLE && m_texture_image_memory != VK_NULL_HANDLE) {
@@ -1364,7 +1426,7 @@ bool vgraphplay::gfx::System::initTextureImageView() {
         return false;
     }
 
-    m_texture_image_view = createImageView(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM);
+    m_texture_image_view = createImageView(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
     if (m_texture_image_view == VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(error) << "Unable to create texture image view";
         return false;
@@ -1843,9 +1905,11 @@ bool vgraphplay::gfx::System::recordCommandBuffers() {
         rp_bi.renderArea.offset = { 0, 0 };
         rp_bi.renderArea.extent = m_swapchain_extent;
 
-        VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-        rp_bi.clearValueCount = 1;
-        rp_bi.pClearValues = &clearColor;
+        std::array<VkClearValue, 2> clear_values{};
+        clear_values[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+        clear_values[1].depthStencil = { 1.0f, 0 };
+        rp_bi.clearValueCount = clear_values.size();
+        rp_bi.pClearValues = clear_values.data();
 
         VkBuffer vertex_buffers[] = {m_vertex_buffer};
         VkDeviceSize offsets[] = {0};
@@ -1885,20 +1949,25 @@ uint32_t vgraphplay::gfx::System::chooseMemoryTypeIndex(uint32_t type_filter, Vk
     return std::numeric_limits<uint32_t>::max();
 }
 
-// VkFormat vgraphplay::gfx::System::chooseFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-//     for (VkFormat format : candidates) {
-//         VkFormatProperties props;
-//         vkGetPhysicalDeviceFormatProperties(m_physical_device, format, &props);
+VkFormat vgraphplay::gfx::System::chooseFormat(const VkFormat *candidates, int num_candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+    for (int i = 0; i < num_candidates; ++i) {
+        const VkFormat &format = candidates[i];
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(m_physical_device, format, &props);
 
-//         if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
-//             return format;
-//         } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
-//             return format;
-//         }
-//     }
+        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+            return format;
+        } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+            return format;
+        }
+    }
 
-//     return VK_FORMAT_UNDEFINED;
-// }
+    return VK_FORMAT_UNDEFINED;
+}
+
+bool vgraphplay::gfx::System::hasStencilComponent(VkFormat format) {
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
 
 bool vgraphplay::gfx::System::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory) {
     if (m_device == VK_NULL_HANDLE) {
@@ -2012,7 +2081,7 @@ bool vgraphplay::gfx::System::createImage(uint32_t width, uint32_t height, VkFor
     return true;
 }
 
-VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat format) {
+VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_mask) {
     VkImageViewCreateInfo iv_ci;
     iv_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     iv_ci.pNext = nullptr;
@@ -2024,7 +2093,7 @@ VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat for
     iv_ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
     iv_ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     iv_ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    iv_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    iv_ci.subresourceRange.aspectMask = aspect_mask;
     iv_ci.subresourceRange.baseMipLevel = 0;
     iv_ci.subresourceRange.levelCount = 1;
     iv_ci.subresourceRange.baseArrayLayer = 0;
@@ -2103,6 +2172,14 @@ bool vgraphplay::gfx::System::transitionImageLayout(VkImage image, VkFormat form
     VkPipelineStageFlags src_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     VkPipelineStageFlags dst_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
+    if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        if (hasStencilComponent(format)) {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    }
+
     if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -2113,6 +2190,11 @@ bool vgraphplay::gfx::System::transitionImageLayout(VkImage image, VkFormat form
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     }
 
     vkCmdPipelineBarrier(cb, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);

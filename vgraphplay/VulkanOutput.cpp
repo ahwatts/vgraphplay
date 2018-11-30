@@ -19,7 +19,7 @@ namespace vgraphplay {
         vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, extensions.data());
 
         msg << "There are " << num_extensions << " Global Instance Extensions";
-        
+
         for (const auto& extension : extensions) {
             msg << std::endl << "  Global Instance Extension: " << extension;
         }
@@ -55,7 +55,7 @@ namespace vgraphplay {
 
     void logPhysicalDevices(VkInstance instance) {
         std::ostringstream msg;
-        
+
         uint32_t num_devices = 0;
         vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
         std::vector<VkPhysicalDevice> devices(num_devices);
@@ -203,7 +203,7 @@ namespace vgraphplay {
 
     std::ostream& operator<<(std::ostream &stream, const VkMemoryHeap &mem_heap) {
         stream << "[ Size: " << (mem_heap.size / 1048576) << " MiB";
-        
+
         stream << ", Flags: ";
         outputMemoryHeapFlags(stream, mem_heap.flags);
 

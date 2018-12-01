@@ -82,6 +82,23 @@ namespace vgraphplay {
                 msg << std::endl << "    Device Extension: " << extension;
             }
 
+            uint32_t num_layers;
+            vkEnumerateDeviceLayerProperties(device, &num_layers, nullptr);
+            std::vector<VkLayerProperties> layers{num_layers};
+            vkEnumerateDeviceLayerProperties(device, &num_layers, layers.data());
+            for (auto&& layer : layers) {
+                msg << std::endl << "    Device Layer: " << layer;
+
+                uint32_t num_layer_extensions;
+                vkEnumerateDeviceExtensionProperties(device, layer.layerName, &num_layer_extensions, nullptr);
+                std::vector<VkExtensionProperties> layer_extensions(num_layer_extensions);
+                vkEnumerateDeviceExtensionProperties(device, layer.layerName, &num_layer_extensions, layer_extensions.data());
+
+                for (auto&& layer_extension : layer_extensions) {
+                    msg << std::endl << "      Device Layer Extension: " << layer_extension;
+                }
+            }
+
             VkPhysicalDeviceMemoryProperties mem_props;
             vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
 

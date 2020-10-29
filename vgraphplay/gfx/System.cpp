@@ -261,7 +261,7 @@ bool vgraphplay::gfx::System::initInstance(bool debug) {
 
     // Add the standard validation layers if we're running in debug mode.
     if (debug) {
-        layer_names.emplace_back("VK_LAYER_LUNARG_standard_validation");
+        layer_names.emplace_back("VK_LAYER_KHRONOS_validation");
     }
 
     // Make sure we have the layers we need.

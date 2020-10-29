@@ -5,7 +5,7 @@ if(WIN32)
   if (CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-mingw;../deps/glfw-mingw;../deps/glm")
   elseif(MSVC AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL 8)
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc-x64;../deps/glfw-msvc-x64;../deps/glm")
+    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc-x64;../deps/glm/cmake/glm")
   elseif(MSVC)
     set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc;../deps/glm")
   endif()
@@ -37,6 +37,15 @@ find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 
+# GLM changed their library link target in a way that we can't really detect.
+if(TARGET glm::glm)
+  set(glm_library "glm::glm")
+elseif(TARGET glm)
+  set(glm_library "glm")
+else()
+  message(FATAL_ERROR "No glm link target found")
+endif()
+
 add_subdirectory(vendor/embed-resource)
 add_subdirectory(vendor/stb)
 
@@ -62,12 +71,12 @@ add_executable(vgraphplay
 target_compile_features(vgraphplay PUBLIC cxx_std_11)
 target_include_directories(vgraphplay PUBLIC vendor/embed-resource)
 target_link_libraries(vgraphplay
-  Boost::log_setup
+  # Boost::log_setup
   Boost::log
   Boost::filesystem
   Vulkan::Vulkan
   glfw
-  glm
+  ${glm_library}
   stb)
 
 if(CMAKE_COMPILER_IS_GNUCXX)

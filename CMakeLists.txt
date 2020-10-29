@@ -3,11 +3,11 @@ project(vgraphplay)
 
 if(WIN32)
   if (CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-mingw;../deps/glfw-mingw;../deps/glm")
+    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-mingw;../deps/glfw-mingw;../deps/glm/cmake/glm")
   elseif(MSVC AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL 8)
     set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc-x64;../deps/glm/cmake/glm")
   elseif(MSVC)
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc;../deps/glm")
+    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc-x64;../deps/glm/cmake/glm")
   endif()
 endif()
 

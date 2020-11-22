@@ -79,6 +79,10 @@ target_link_libraries(vgraphplay
   ${glm_library}
   stb)
 
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+  target_link_libraries(vgraphplay rt)
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCXX)
   target_compile_options(vgraphplay PUBLIC "-Wall" "-Og" "-pg" "-ggdb")
   set_target_properties(vgraphplay PROPERTIES LINK_FLAGS "-pg")

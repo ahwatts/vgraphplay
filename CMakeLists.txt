@@ -58,10 +58,6 @@ embed_resources(EMBEDDED_TEXTURES textures/warren.jpg)
 
 add_executable(vgraphplay
   vgraphplay/Application.cpp
-  # vgraphplay/gfx/Commands.cpp
-  # vgraphplay/gfx/Device.cpp
-  # vgraphplay/gfx/Pipeline.cpp
-  # vgraphplay/gfx/Presentation.cpp
   vgraphplay/gfx/System.cpp
   vgraphplay/VulkanExt.cpp
   vgraphplay/VulkanOutput.cpp
@@ -71,7 +67,6 @@ add_executable(vgraphplay
 target_compile_features(vgraphplay PUBLIC cxx_std_11)
 target_include_directories(vgraphplay PUBLIC vendor/embed-resource)
 target_link_libraries(vgraphplay
-  # Boost::log_setup
   Boost::log
   Boost::filesystem
   Vulkan::Vulkan

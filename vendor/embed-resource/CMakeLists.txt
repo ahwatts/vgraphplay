@@ -17,7 +17,7 @@ function(embed_resources out_var)
   set(${out_var} "${result}" PARENT_SCOPE)
 endfunction()
 
-add_executable(embed-resource embedresource.cpp)
+add_executable(embed-resource Resource.h embedresource.cpp)
 target_compile_features(embed-resource PUBLIC cxx_std_14)
 set_target_properties(embed-resource PROPERTIES CXX_VISIBILITY_PRESET hidden)
 target_include_directories(embed-resource PUBLIC .)

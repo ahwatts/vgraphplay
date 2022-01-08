@@ -46,9 +46,13 @@ embed_resources(EMBEDDED_SHADERS ${SPIRV_SHADERS})
 embed_resources(EMBEDDED_TEXTURES textures/warren.jpg)
 
 add_executable(vgraphplay
+  vgraphplay/vulkan.h
+  vgraphplay/Application.h
   vgraphplay/Application.cpp
+  vgraphplay/gfx/System.h
   vgraphplay/gfx/System.cpp
   vgraphplay/VulkanExt.cpp
+  vgraphplay/VulkanOutput.h
   vgraphplay/VulkanOutput.cpp
   vgraphplay/vgraphplay.cpp
   ${EMBEDDED_SHADERS}

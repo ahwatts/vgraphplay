@@ -1,5 +1,6 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
+#include <algorithm>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <iostream>
@@ -46,7 +47,6 @@ int main(int argc, char** argv) {
             lineCount = 0;
         }
     }
-
 
     ofs << "};" << endl;
     ofs << "extern const std::size_t _resource_" << sym << "_len = sizeof(_resource_" << sym << ");";

@@ -1,0 +1,17 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "default",
+            "toolchainFile": "C:/Users/Andrew/Projects/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        },
+        {
+            "name": "static",
+            "inherits": "default",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+            }
+        }
+    ]
+}

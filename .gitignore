@@ -1,12 +1,5 @@
-/build
-/msvc/**/*.VC.db
-/msvc/**/*.VC.opendb
-/msvc/vgraphplay/*.user
-/msvc/vgraphplay/Debug
-/msvc/vgraphplay/x64
-/msvc/Debug
-/msvc/x64
-/msvc/.vs
+/build*
 *.suo
 gmon.out
 /.vscode
+CMakeUserPresets.json

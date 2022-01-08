@@ -1,15 +1,5 @@
-cmake_minimum_required(VERSION 3.11.0)
+cmake_minimum_required(VERSION 3.22.0)
 project(vgraphplay)
-
-if(WIN32)
-  if (CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-mingw;../deps/glfw-mingw;../deps/glm/cmake/glm")
-  elseif(MSVC AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL 8)
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc-x64;../deps/glm/cmake/glm")
-  elseif(MSVC)
-    set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};../deps/boost-msvc;../deps/glfw-msvc-x64;../deps/glm/cmake/glm")
-  endif()
-endif()
 
 function(compile_spirv out_var)
   set(result)
@@ -31,7 +21,6 @@ function(compile_spirv out_var)
   set(${out_var} "${result}" PARENT_SCOPE)
 endfunction()
 
-set(Boost_USE_STATIC_LIBS "On")
 find_package(Boost REQUIRED COMPONENTS filesystem log)
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -64,7 +53,7 @@ add_executable(vgraphplay
   vgraphplay/vgraphplay.cpp
   ${EMBEDDED_SHADERS}
   ${EMBEDDED_TEXTURES})
-target_compile_features(vgraphplay PUBLIC cxx_std_11)
+target_compile_features(vgraphplay PUBLIC cxx_std_14)
 target_include_directories(vgraphplay PUBLIC vendor/embed-resource)
 target_link_libraries(vgraphplay
   Boost::log

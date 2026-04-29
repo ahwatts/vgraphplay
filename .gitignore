@@ -1,4 +1,5 @@
 /build*
+/out
 *.suo
 gmon.out
 /.vscode

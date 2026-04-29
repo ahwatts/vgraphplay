@@ -260,8 +260,14 @@ namespace vgraphplay {
             return stream << "FIFO";
         case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
             return stream << "Relaxed FIFO";
+        case VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR:
+            return stream << "Shared demand refresh";
+        case VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR:
+            return stream << "Shared continuous refresh";
+        case 1000361000: // VK_PRESENT_MODE_FIFO_LATEST_READY_KHR
+            return stream << "FIFO latest ready";
         default:
-            return stream << mode;
+            return stream << "Unknown: " << ((uint64_t)mode);
         }
     }
 
@@ -278,7 +284,7 @@ namespace vgraphplay {
         case VK_PHYSICAL_DEVICE_TYPE_CPU:
             return stream << "CPU";
         default:
-            return stream << "Unknown: " << device_type;
+            return stream << "Unknown: " << ((uint64_t)device_type);
         }
     }
 

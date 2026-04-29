@@ -1,5 +1,5 @@
 all:
-	$(MAKE) -C build
+	$(MAKE) -C out/build
 
 %:
-	$(MAKE) -C build $@
+	$(MAKE) -C out/build $@

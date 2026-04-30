@@ -1,3 +1,6 @@
+# Acquired from
+# https://github.com/KhronosGroup/Vulkan-Samples/blob/main/bldsys/cmake/module/FindVulkan.cmake
+
 # Updates for iOS Copyright (c) 2024-2026, Holochip Inc.
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying

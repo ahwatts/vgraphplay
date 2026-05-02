@@ -39,18 +39,15 @@ namespace vgraphplay {
 
         class System {
         public:
-            System(GLFWwindow *window);
+            System(GLFWwindow *window, bool debug);
             ~System();
-
-            bool initialize(bool debug);
-            void dispose();
 
             void drawFrame();
             void setFramebufferResized();
 
         private:
-            bool initInstance(bool debug);
-            void cleanupInstance();
+            void initInstance(bool debug);
+            /* void cleanupInstance();
 
             bool initDebugCallback();
             void cleanupDebugCallback();
@@ -136,13 +133,14 @@ namespace vgraphplay {
             bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
 
             VkCommandBuffer beginOneTimeCommands();
-            bool endOneTimeCommands(VkCommandBuffer commands);
+            bool endOneTimeCommands(VkCommandBuffer commands); */
 
             GLFWwindow *m_window;
 
             // Instance, device, and debug callback.
-            VkInstance m_instance;
-            VkDebugReportCallbackEXT m_debug_callback;
+            vk::raii::Context m_context;
+            vk::raii::Instance m_instance;
+            /* VkDebugReportCallbackEXT m_debug_callback;
             VkDevice m_device;
             VkPhysicalDevice m_physical_device;
 
@@ -188,7 +186,7 @@ namespace vgraphplay {
 
             // Semaphores.
             VkSemaphore m_image_available_semaphore;
-            VkSemaphore m_render_finished_semaphore;
+            VkSemaphore m_render_finished_semaphore; */
         };
     }
 }

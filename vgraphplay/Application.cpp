@@ -12,7 +12,7 @@
 
 vgraphplay::Application::Application(GLFWwindow *window, bool debug)
   : m_window{window},
-    m_gfx{window},
+    m_gfx{window, debug},
     m_window_width{0},
     m_window_height{0}
 {
@@ -20,15 +20,9 @@ vgraphplay::Application::Application(GLFWwindow *window, bool debug)
     glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(m_window, vgraphplay::Application::keyCallback);
     glfwSetFramebufferSizeCallback(m_window, vgraphplay::Application::resizeCallback);
-    
-    if (!m_gfx.initialize(debug)) {
-        throw std::runtime_error("Error initializing graphics sytem");
-    }
 }
 
-vgraphplay::Application::~Application() {
-    m_gfx.dispose();
-}
+vgraphplay::Application::~Application() {}
 
 void vgraphplay::Application::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mode) {
     Application *app = (Application*)glfwGetWindowUserPointer(window);

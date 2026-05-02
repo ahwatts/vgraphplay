@@ -69,9 +69,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-vgraphplay::gfx::System::System(GLFWwindow *window)
+vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     : m_window{window},
-      m_instance{VK_NULL_HANDLE},
+      m_context{},
+      m_instance{nullptr} /*,
       m_debug_callback{VK_NULL_HANDLE},
       m_device{VK_NULL_HANDLE},
       m_physical_device{VK_NULL_HANDLE},
@@ -111,14 +112,16 @@ vgraphplay::gfx::System::System(GLFWwindow *window)
       m_pipeline{VK_NULL_HANDLE},
       m_swapchain_framebuffers{},
       m_image_available_semaphore{VK_NULL_HANDLE},
-      m_render_finished_semaphore{VK_NULL_HANDLE}
-{}
-
-vgraphplay::gfx::System::~System() {
-    dispose();
+      m_render_finished_semaphore{VK_NULL_HANDLE} */
+{
+    initInstance(debug);
 }
 
-bool vgraphplay::gfx::System::initialize(bool debug) {
+vgraphplay::gfx::System::~System() {
+    // dispose();
+}
+
+/* bool vgraphplay::gfx::System::initialize(bool debug) {
     bool rv = initInstance(debug);
 
     if (rv && debug) {
@@ -207,107 +210,103 @@ void vgraphplay::gfx::System::recreateSwapchain() {
     rv = rv && initSwapchainFramebuffers();
     rv = rv && initCommandBuffers();
     rv = rv && recordCommandBuffers();
+} */
+
+void vgraphplay::gfx::System::initInstance(bool debug) {
+    if (m_instance != nullptr) {
+        return;
+    }
+
+    logGlobalExtensions(m_context);
+    logGlobalLayers(m_context);
+
+    uint32_t glfw_extension_count = 0;
+    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    auto all_extensions = m_context.enumerateInstanceExtensionProperties();
+    for (uint32_t i = 0; i < glfw_extension_count; ++i) {
+        auto glfw_extension = glfw_extensions[i];
+        bool none_match = std::ranges::none_of(
+            all_extensions,
+            [glfw_extension](auto const &extension) {
+                return strcmp(extension.extensionName, glfw_extension) == 0;
+            }
+        );
+        
+        if (none_match) {
+            throw std::runtime_error("Required instance extension not found: " + std::string{glfw_extension});
+        }
+    }
+
+    // TODO: include VK_EXT_DEBUG_REPORT_EXTENSION
+
+    constexpr vk::ApplicationInfo app_info{
+        .pApplicationName = "vgraphplay",
+        .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
+        .pEngineName = "No Engine",
+        .engineVersion = VK_MAKE_VERSION(0, 1, 0),
+        .apiVersion = vk::ApiVersion14
+    };
+
+    vk::InstanceCreateInfo inst_ci{
+        .pApplicationInfo = &app_info,
+        .enabledExtensionCount = glfw_extension_count,
+        .ppEnabledExtensionNames = glfw_extensions
+    };
+
+    m_instance = vk::raii::Instance(m_context, inst_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << &m_instance;
+
+    // // The layers we need.
+    // std::vector<const char*> layer_names;
+
+    // // Add the standard validation layers if we're running in debug mode.
+    // if (debug) {
+    //     layer_names.emplace_back("VK_LAYER_KHRONOS_validation");
+    // }
+
+    // // Make sure we have the layers we need.
+    // uint32_t num_layers;
+    // vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
+    // std::vector<VkLayerProperties> instance_layers{num_layers};
+    // vkEnumerateInstanceLayerProperties(&num_layers, instance_layers.data());
+    // for (unsigned int i = 0; i < layer_names.size(); ++i) {
+    //     bool found = false;
+    //     std::string wanted_layer_name{layer_names[i]};
+    //     for (unsigned int j = 0; j < instance_layers.size(); ++j) {
+    //         std::string layer_name{instance_layers[j].layerName};
+    //         if (wanted_layer_name == layer_name) {
+    //             found = true;
+    //             break;
+    //         }
+    //     }
+
+    //     if (!found) {
+    //         BOOST_LOG_TRIVIAL(error) << "Unable to find layer " << layer_names[i] << ". Cannot continue.";
+    //         return;
+    //     }
+    // }
+
+    // VkInstanceCreateInfo inst_ci;
+    // inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    // inst_ci.pNext = nullptr;
+    // inst_ci.flags = 0;
+    // inst_ci.pApplicationInfo = nullptr;
+    // inst_ci.enabledLayerCount = (uint32_t)layer_names.size();
+    // inst_ci.ppEnabledLayerNames = layer_names.data();
+    // inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
+    // inst_ci.ppEnabledExtensionNames = extension_names.data();
+
+    // VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
+    // if (rslt == VK_SUCCESS) {
+    //     BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
+    //     return;
+    // } else {
+    //     BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
+    //     return;
+    // }
 }
 
-bool vgraphplay::gfx::System::initInstance(bool debug) {
-    if (m_instance != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    vk::raii::Context context;
-    logGlobalExtensions(context);
-    logGlobalLayers(context);
-
-    // The list of extensions we need.
-    std::vector<const char*> extension_names;
-
-    // Add the extensions GLFW wants to the list.
-    uint32_t glfw_extension_count;
-    const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-    for (unsigned int i = 0; i < glfw_extension_count; ++i) {
-        BOOST_LOG_TRIVIAL(trace) << "GLFW requires extension: " << glfw_extensions[i];
-        extension_names.emplace_back(glfw_extensions[i]);
-    }
-
-    // Add the debug report extension if we're running in debug mode.
-    if (debug) {
-        extension_names.emplace_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-    }
-
-    // Make sure we have the extensions we need.
-    uint32_t num_extensions;
-    vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
-    std::vector<VkExtensionProperties> instance_extensions{num_extensions};
-    vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, instance_extensions.data());
-    for (auto&& wanted_extension_name : extension_names) {
-        bool found = false;
-        std::string wanted_extension_name_str{wanted_extension_name};
-        BOOST_LOG_TRIVIAL(debug) << "wanted extension " << wanted_extension_name_str;
-        for (auto&& extension : instance_extensions) {
-            std::string extension_name_str{extension.extensionName};
-            if (wanted_extension_name_str == extension_name_str) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            BOOST_LOG_TRIVIAL(error) << "Unable to find extension " << wanted_extension_name_str << ". Cannot continue.";
-            return false;
-        }
-    }
-
-    // The layers we need.
-    std::vector<const char*> layer_names;
-
-    // Add the standard validation layers if we're running in debug mode.
-    if (debug) {
-        layer_names.emplace_back("VK_LAYER_KHRONOS_validation");
-    }
-
-    // Make sure we have the layers we need.
-    uint32_t num_layers;
-    vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
-    std::vector<VkLayerProperties> instance_layers{num_layers};
-    vkEnumerateInstanceLayerProperties(&num_layers, instance_layers.data());
-    for (unsigned int i = 0; i < layer_names.size(); ++i) {
-        bool found = false;
-        std::string wanted_layer_name{layer_names[i]};
-        for (unsigned int j = 0; j < instance_layers.size(); ++j) {
-            std::string layer_name{instance_layers[j].layerName};
-            if (wanted_layer_name == layer_name) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            BOOST_LOG_TRIVIAL(error) << "Unable to find layer " << layer_names[i] << ". Cannot continue.";
-            return false;
-        }
-    }
-
-    VkInstanceCreateInfo inst_ci;
-    inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    inst_ci.pNext = nullptr;
-    inst_ci.flags = 0;
-    inst_ci.pApplicationInfo = nullptr;
-    inst_ci.enabledLayerCount = (uint32_t)layer_names.size();
-    inst_ci.ppEnabledLayerNames = layer_names.data();
-    inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
-    inst_ci.ppEnabledExtensionNames = extension_names.data();
-
-    VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupInstance() {
+/* void vgraphplay::gfx::System::cleanupInstance() {
     if (m_instance != VK_NULL_HANDLE) {
         BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
         vkDestroyInstance(m_instance, nullptr);
@@ -2267,10 +2266,10 @@ bool vgraphplay::gfx::System::endOneTimeCommands(VkCommandBuffer commands) {
 
     vkFreeCommandBuffers(m_device, m_command_pool, 1, &commands);
     return true;
-}
+} */
 
 void vgraphplay::gfx::System::drawFrame() {
-    uint32_t image_index;
+    /* uint32_t image_index;
 
     if (m_framebuffer_resized) {
         recreateSwapchain();
@@ -2320,14 +2319,14 @@ void vgraphplay::gfx::System::drawFrame() {
     rslt = vkQueuePresentKHR(m_present_queue, &pi);
     if (rslt != VK_SUCCESS) {
         BOOST_LOG_TRIVIAL(error) << "Error submitting swapchain update: " << rslt;
-    }
+    } */
 }
 
 void vgraphplay::gfx::System::setFramebufferResized() {
-    m_framebuffer_resized = true;
+    // m_framebuffer_resized = true;
 }
 
-VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
+/* VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
     VkVertexInputBindingDescription desc;
     desc.binding = 0;
     desc.stride = sizeof(Vertex);
@@ -2354,4 +2353,4 @@ std::array<VkVertexInputAttributeDescription, 3> vgraphplay::gfx::Vertex::attrib
     descs[2].format = VK_FORMAT_R32G32_SFLOAT;
 
     return descs;
-}
+} */

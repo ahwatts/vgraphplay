@@ -1,6 +1,7 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
 #include <format>
+#include <sstream>
 #include <string>
 #include <vector>
 

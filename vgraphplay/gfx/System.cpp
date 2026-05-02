@@ -18,6 +18,9 @@
 #include "System.h"
 #include "../VulkanOutput.h"
 
+bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name);
+std::vector<const char *> buildExtensionList(vk::raii::Context &context, bool debug);
+
 const Resource UNLIT_VERT_BYTECODE = LOAD_RESOURCE(unlit_vert_spv);
 const Resource UNLIT_FRAG_BYTECODE = LOAD_RESOURCE(unlit_frag_spv);
 
@@ -221,56 +224,12 @@ void vgraphplay::gfx::System::initInstance(bool debug) {
     logGlobalLayers(m_context);
 
     vk::InstanceCreateFlags flags;
-    std::vector<const char *> extension_names;
-    auto all_extensions = m_context.enumerateInstanceExtensionProperties();
+    std::vector<const char *> extension_names = buildExtensionList(m_context, debug);
 
-    uint32_t glfw_extension_count = 0;
-    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-    for (uint32_t i = 0; i < glfw_extension_count; ++i) {
-        auto glfw_extension = glfw_extensions[i];
-        bool none_match = std::ranges::none_of(
-            all_extensions,
-            [glfw_extension](auto const &extension) {
-                return strcmp(extension.extensionName, glfw_extension) == 0;
-            }
-        );
-
-        if (none_match) {
-            throw std::runtime_error("Required instance extension not found: " + std::string{glfw_extension});
-        } else {
-            extension_names.push_back(glfw_extension);
-        }
-    }
-
-    if (debug) {
-        bool has_debug_report_extension = std::ranges::any_of(
-            all_extensions,
-            [](auto const &extension) {
-                return strcmp(extension.extensionName, vk::EXTDebugUtilsExtensionName) == 0;
-            }
-        );
-
-        if (has_debug_report_extension) {
-            extension_names.push_back(vk::EXTDebugUtilsExtensionName);
-        } else {
-            BOOST_LOG_TRIVIAL(info) << "Vulkan debug utils extension is unavailable";
-        }
-    }
-
+    // In addition to the extension that was checked for and added above, we
+    // also need to pass this flag in.
     #ifdef __APPLE__
-    bool has_portability_extension = std::ranges::any_of(
-        all_extensions,
-        [](auto const &extension) {
-            return strcmp(extension.extensionName, vk::KHRPortabilityEnumerationExtensionName) == 0;
-        }
-    );
-
-    if (has_portability_extension) {
-        flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
-        extension_names.push_back(vk::KHRPortabilityEnumerationExtensionName);
-    } else {
-        throw std::runtime_error("Required instance extension not found: " + std::string{vk::KHRPortabilityEnumerationExtensionName});
-    }
+    flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
     #endif
 
     constexpr vk::ApplicationInfo app_info{
@@ -2389,3 +2348,45 @@ std::array<VkVertexInputAttributeDescription, 3> vgraphplay::gfx::Vertex::attrib
 
     return descs;
 } */
+
+bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name) {
+    return std::ranges::any_of(
+        all_extensions,
+        [extension_name](auto const &extension) {
+            return strcmp(extension.extensionName, extension_name) == 0;
+        }
+    );
+}
+
+std::vector<const char *> buildExtensionList(vk::raii::Context &context, bool debug) {
+    std::vector<const char *> rv;
+    auto all_extensions = context.enumerateInstanceExtensionProperties();
+
+    uint32_t glfw_extension_count = 0;
+    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    for (uint32_t i = 0; i < glfw_extension_count; ++i) {
+        if (hasExtension(all_extensions, glfw_extensions[i])) {
+            rv.push_back(glfw_extensions[i]);
+        } else {
+            throw std::runtime_error("Required instance extension not found: " + std::string{glfw_extensions[i]});
+        }
+    }
+
+    if (debug) {
+        if (hasExtension(all_extensions, vk::EXTDebugUtilsExtensionName)) {
+            rv.push_back(vk::EXTDebugUtilsExtensionName);
+        } else {
+            BOOST_LOG_TRIVIAL(info) << "Vulkan debug utils extension is unavailable";
+        }
+    }
+
+    #ifdef __APPLE__
+    if (hasExtension(all_extensions, vk::KHRPortabilityEnumerationExtensionName)) {
+        rv.push_back(vk::KHRPortabilityEnumerationExtensionName);
+    } else {
+        throw std::runtime_error("Required instance extension not found: " + std::string{vk::KHRPortabilityEnumerationExtensionName});
+    }
+    #endif
+
+    return rv;
+}

@@ -1,6 +1,7 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
-#include <iostream>
+#include <format>
+#include <print>
 #include <vector>
 
 #include "vulkan.h"
@@ -9,7 +10,7 @@
 #include "Resource.h"
 #include "gfx/System.h"
 
-vgraphplay::Application::Application(GLFWwindow *window)
+vgraphplay::Application::Application(GLFWwindow *window, bool debug)
   : m_window{window},
     m_gfx{window},
     m_window_width{0},
@@ -19,18 +20,13 @@ vgraphplay::Application::Application(GLFWwindow *window)
     glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(m_window, vgraphplay::Application::keyCallback);
     glfwSetFramebufferSizeCallback(m_window, vgraphplay::Application::resizeCallback);
+    
+    if (!m_gfx.initialize(debug)) {
+        throw std::runtime_error("Error initializing graphics sytem");
+    }
 }
 
 vgraphplay::Application::~Application() {
-    dispose();
-}
-
-bool vgraphplay::Application::initialize(bool debug) {
-    bool rv = m_gfx.initialize(debug);
-    return rv;
-}
-
-void vgraphplay::Application::dispose() {
     m_gfx.dispose();
 }
 
@@ -47,11 +43,7 @@ void vgraphplay::Application::handleKey(int key, int scancode, int action, int m
         glfwSetWindowShouldClose(m_window, GLFW_TRUE);
         break;
     default:
-        std::cout << "key: " << key
-                  << " scancode: " << scancode
-                  << " action: " << action
-                  << " mode: " << mode
-                  << std::endl;
+        std::println(stderr, "Key: {} scancode: {} action: {} mode: {}", key, scancode, action, mode);
     }
 }
 

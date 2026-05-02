@@ -10,11 +10,11 @@
 namespace vgraphplay {
     class Application {
     public:
-        Application(GLFWwindow *window);
+        Application(GLFWwindow *window, bool debug);
         ~Application();
 
-        bool initialize(bool debug);
-        void dispose();
+        // bool initialize(bool debug);
+        // void dispose();
 
         static void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mode);
         void handleKey(int key, int scancode, int action, int mode);

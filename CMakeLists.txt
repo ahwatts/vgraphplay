@@ -116,8 +116,13 @@ add_executable(vgraphplay
   vgraphplay/vgraphplay.cpp
   ${EMBEDDED_SHADERS}
   ${EMBEDDED_TEXTURES})
-target_compile_features(vgraphplay PUBLIC cxx_std_14)
+target_compile_features(vgraphplay PUBLIC cxx_std_23)
 target_include_directories(vgraphplay PUBLIC vendor/embed-resource)
+
+if(ENABLE_CPP20_MODULE)
+  target_compile_definitions(vgraphplay PRIVATE USE_CPP20_MODULES=1)
+endif()
+
 target_link_libraries(vgraphplay
   Boost::log
   Boost::filesystem

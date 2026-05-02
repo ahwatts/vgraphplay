@@ -1,6 +1,7 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
-#include <sstream>
+#include <format>
+#include <string>
 #include <vector>
 
 #include <boost/log/trivial.hpp>
@@ -13,47 +14,55 @@
 #include "VulkanOutput.h"
 
 namespace vgraphplay {
-    void logGlobalExtensions() {
-        std::ostringstream msg;
-
-        uint32_t num_extensions;
-        vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, nullptr);
-        std::vector<VkExtensionProperties> extensions(num_extensions);
-        vkEnumerateInstanceExtensionProperties(nullptr, &num_extensions, extensions.data());
-
-        msg << "There are " << num_extensions << " Global Instance Extensions";
-
+    void logGlobalExtensions(vk::raii::Context &context) {
+        const std::vector<vk::ExtensionProperties> extensions = context.enumerateInstanceExtensionProperties();
+        std::string msg = std::format("There are {} global instance extensions:", extensions.size());
         for (const auto& extension : extensions) {
-            msg << std::endl << "  Global Instance Extension: " << extension;
+            msg += std::format(
+                "\n  - {}, spec version {}.{}.{}", 
+                extension.extensionName.data(), 
+                VK_VERSION_MAJOR(extension.specVersion),
+                VK_VERSION_MINOR(extension.specVersion),
+                VK_VERSION_PATCH(extension.specVersion)
+            );
         }
-
-        BOOST_LOG_TRIVIAL(trace) << msg.str();
+        BOOST_LOG_TRIVIAL(trace) << msg;
     }
 
-    void logGlobalLayers() {
-        std::ostringstream msg;
-
-        uint32_t num_layers;
-        vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
-        std::vector<VkLayerProperties> layers(num_layers);
-        vkEnumerateInstanceLayerProperties(&num_layers, layers.data());
-
-        msg << "There are " << num_layers << " Instance Layers";
-
+    void logGlobalLayers(vk::raii::Context &context) {
+        const std::vector<vk::LayerProperties> layers = context.enumerateInstanceLayerProperties();
+        std::string msg = std::format("There are {} instance layers:", layers.size());
         for (const auto& layer : layers) {
-            msg << std::endl << "  Instance Layer: " << layer;
+            msg += std::format(
+                "\n  - {}, spec version: {}.{}.{}, implementation version: {}.{}.{} - {}", 
+                layer.layerName.data(),
+                VK_VERSION_MAJOR(layer.specVersion),
+                VK_VERSION_MINOR(layer.specVersion),
+                VK_VERSION_PATCH(layer.specVersion),
+                VK_VERSION_MAJOR(layer.implementationVersion),
+                VK_VERSION_MINOR(layer.implementationVersion),
+                VK_VERSION_PATCH(layer.implementationVersion),
+                layer.description.data()
+            );
 
-            uint32_t num_extensions;
-            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, nullptr);
-            std::vector<VkExtensionProperties> extensions(num_extensions);
-            vkEnumerateInstanceExtensionProperties(layer.layerName, &num_extensions, extensions.data());
+            const std::vector<vk::ExtensionProperties> layer_extensions = 
+                context.enumerateInstanceExtensionProperties(std::string{layer.layerName.cbegin(), layer.layerName.cend()});
 
-            for (const auto& extension : extensions) {
-                msg << std::endl << "    Instance Layer Extension: " << extension;
+            if (!layer_extensions.empty()) {
+                msg += std::format(", with {} layer extensions:", layer_extensions.size());
+                for (const auto& extension : layer_extensions) {
+                    msg += std::format(
+                        "\n    - {}, spec version {}.{}.{}", 
+                        extension.extensionName.data(),
+                        VK_VERSION_MAJOR(extension.specVersion),
+                        VK_VERSION_MINOR(extension.specVersion),
+                        VK_VERSION_PATCH(extension.specVersion)
+                    );
+                }
             }
         }
 
-        BOOST_LOG_TRIVIAL(trace) << msg.str();
+        BOOST_LOG_TRIVIAL(trace) << msg;
     }
 
     void logPhysicalDevices(VkInstance instance) {

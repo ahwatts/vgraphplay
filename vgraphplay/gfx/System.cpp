@@ -214,8 +214,9 @@ bool vgraphplay::gfx::System::initInstance(bool debug) {
         return true;
     }
 
-    logGlobalExtensions();
-    logGlobalLayers();
+    vk::raii::Context context;
+    logGlobalExtensions(context);
+    logGlobalLayers(context);
 
     // The list of extensions we need.
     std::vector<const char*> extension_names;

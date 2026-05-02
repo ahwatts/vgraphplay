@@ -8,8 +8,8 @@
 #include "vulkan.h"
 
 namespace vgraphplay {
-    void logGlobalExtensions();
-    void logGlobalLayers();
+    void logGlobalExtensions(vk::raii::Context &context);
+    void logGlobalLayers(vk::raii::Context &context);
     void logPhysicalDevices(VkInstance instance);
     void logSurfaceCapabilities(VkPhysicalDevice device, VkSurfaceKHR surface);
 

@@ -4,3 +4,4 @@
 gmon.out
 /.vscode
 CMakeUserPresets.json
+.DS_Store

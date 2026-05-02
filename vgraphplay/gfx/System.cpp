@@ -220,9 +220,12 @@ void vgraphplay::gfx::System::initInstance(bool debug) {
     logGlobalExtensions(m_context);
     logGlobalLayers(m_context);
 
+    vk::InstanceCreateFlags flags;
+    std::vector<const char *> extension_names;
+    auto all_extensions = m_context.enumerateInstanceExtensionProperties();
+
     uint32_t glfw_extension_count = 0;
     auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-    auto all_extensions = m_context.enumerateInstanceExtensionProperties();
     for (uint32_t i = 0; i < glfw_extension_count; ++i) {
         auto glfw_extension = glfw_extensions[i];
         bool none_match = std::ranges::none_of(
@@ -231,13 +234,44 @@ void vgraphplay::gfx::System::initInstance(bool debug) {
                 return strcmp(extension.extensionName, glfw_extension) == 0;
             }
         );
-        
+
         if (none_match) {
             throw std::runtime_error("Required instance extension not found: " + std::string{glfw_extension});
+        } else {
+            extension_names.push_back(glfw_extension);
         }
     }
 
-    // TODO: include VK_EXT_DEBUG_REPORT_EXTENSION
+    if (debug) {
+        bool has_debug_report_extension = std::ranges::any_of(
+            all_extensions,
+            [](auto const &extension) {
+                return strcmp(extension.extensionName, vk::EXTDebugUtilsExtensionName) == 0;
+            }
+        );
+
+        if (has_debug_report_extension) {
+            extension_names.push_back(vk::EXTDebugUtilsExtensionName);
+        } else {
+            BOOST_LOG_TRIVIAL(info) << "Vulkan debug utils extension is unavailable";
+        }
+    }
+
+    #ifdef __APPLE__
+    bool has_portability_extension = std::ranges::any_of(
+        all_extensions,
+        [](auto const &extension) {
+            return strcmp(extension.extensionName, vk::KHRPortabilityEnumerationExtensionName) == 0;
+        }
+    );
+
+    if (has_portability_extension) {
+        flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
+        extension_names.push_back(vk::KHRPortabilityEnumerationExtensionName);
+    } else {
+        throw std::runtime_error("Required instance extension not found: " + std::string{vk::KHRPortabilityEnumerationExtensionName});
+    }
+    #endif
 
     constexpr vk::ApplicationInfo app_info{
         .pApplicationName = "vgraphplay",
@@ -248,9 +282,10 @@ void vgraphplay::gfx::System::initInstance(bool debug) {
     };
 
     vk::InstanceCreateInfo inst_ci{
+        .flags = flags,
         .pApplicationInfo = &app_info,
-        .enabledExtensionCount = glfw_extension_count,
-        .ppEnabledExtensionNames = glfw_extensions
+        .enabledExtensionCount = static_cast<uint32_t>(extension_names.size()),
+        .ppEnabledExtensionNames = extension_names.data(),
     };
 
     m_instance = vk::raii::Instance(m_context, inst_ci);

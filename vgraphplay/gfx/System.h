@@ -32,7 +32,7 @@ namespace vgraphplay {
         };
 
         struct ChosenDeviceInfo {
-            vk::PhysicalDevice dev;
+            vk::raii::PhysicalDevice dev;
             uint32_t graphics_queue_family;
             uint32_t present_queue_family;
         };
@@ -50,7 +50,7 @@ namespace vgraphplay {
             void initDebugMessenger();
 
             void initDevice();
-            ChosenDeviceInfo choosePhysicalDevice(std::vector<vk::PhysicalDevice> &devices, vk::SurfaceKHR &surface);
+            ChosenDeviceInfo choosePhysicalDevice(std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
 
             /* bool initSurface();
             void cleanupSurface();

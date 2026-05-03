@@ -285,6 +285,8 @@ void vgraphplay::gfx::System::initDevice() {
     }
 
     logPhysicalDevices(m_instance);
+    std::vector<vk::raii::PhysicalDevice> physical_devices = m_instance.enumeratePhysicalDevices();
+    ChosenDeviceInfo chosen_device = choosePhysicalDevice(physical_devices);
 
     /* uint32_t num_devices;
     vkEnumeratePhysicalDevices(m_instance, &num_devices, nullptr);
@@ -359,10 +361,42 @@ void vgraphplay::gfx::System::initDevice() {
     } */
 }
 
-vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<vk::PhysicalDevice> &devices, vk::SurfaceKHR &surface) {
-    const uint32_t MAX_INT = std::numeric_limits<uint32_t>::max();
+vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */) {
+    std::vector<const char *> required_extensions{
+        vk::KHRSwapchainExtensionName
+    };
 
-    /* for (auto &dev : devices) {
+    for (auto &dev : devices) {
+        const vk::PhysicalDeviceProperties props = dev.getProperties();
+        const std::vector<vk::ExtensionProperties> all_extensions = dev.enumerateDeviceExtensionProperties();
+        const std::vector<vk::QueueFamilyProperties> queue_families = dev.getQueueFamilyProperties();
+
+        bool supports_vulkan_13 = props.apiVersion >= vk::ApiVersion13;
+        bool supports_graphics = std::ranges::any_of(
+            queue_families, 
+            [](const auto &qfp) { return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics); }
+        );
+        bool supports_all_extensions = std::ranges::all_of(
+            required_extensions,
+            [&all_extensions](const auto &this_req_ext) {
+                return std::ranges::any_of(
+                    all_extensions,
+                    [this_req_ext](const auto &ext) {
+                        return strcmp(ext.extensionName, this_req_ext) == 0;
+                    }
+                );
+            }
+        );
+
+        if (supports_vulkan_13 && supports_graphics && supports_all_extensions) {
+            return {
+                dev,
+                0,
+                0
+            };
+        }
+
+        /*
         // Do we support the required properties & features?
         // VkPhysicalDeviceProperties props;
         VkPhysicalDeviceFeatures features;
@@ -427,14 +461,10 @@ vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(
                 graphics_queue,
                 present_queue,
             };
-        }
-    } */
-
-    return {
-        nullptr,
-        MAX_INT,
-        MAX_INT,
-    };
+        } */
+    }
+    
+    throw std::runtime_error{"Could not find a suitable GPU"};
 }
 
 /* bool vgraphplay::gfx::System::initSurface() {

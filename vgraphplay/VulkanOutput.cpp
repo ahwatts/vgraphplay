@@ -15,36 +15,47 @@
 #include "VulkanOutput.h"
 
 namespace vgraphplay {
-    void logGlobalExtensions(vk::raii::Context &context) {
+    std::string versionMessage(uint32_t version) {
+        return std::format(
+            "{}.{}.{}",
+            VK_VERSION_MAJOR(version),
+            VK_VERSION_MINOR(version),
+            VK_VERSION_PATCH(version)
+        );
+    }
+
+    std::string extensionMessage(const vk::ExtensionProperties &ext_props) {
+        return std::format(
+            "{}, spec version {}", 
+            ext_props.extensionName.data(), 
+            versionMessage(ext_props.specVersion)
+        );
+    }
+
+    std::string layerMessage(const vk::LayerProperties &layer_props) {
+        return std::format(
+            "{}, spec version: {}, implementation version: {} - {}", 
+            layer_props.layerName.data(),
+            versionMessage(layer_props.specVersion),
+            versionMessage(layer_props.implementationVersion),
+            layer_props.description.data()
+        );
+    }
+
+    void logInstanceExtensions(const vk::raii::Context &context) {
         const std::vector<vk::ExtensionProperties> extensions = context.enumerateInstanceExtensionProperties();
-        std::string msg = std::format("There are {} global instance extensions:", extensions.size());
+        std::string msg = std::format("There are {} instance extensions:", extensions.size());
         for (const auto& extension : extensions) {
-            msg += std::format(
-                "\n  - {}, spec version {}.{}.{}", 
-                extension.extensionName.data(), 
-                VK_VERSION_MAJOR(extension.specVersion),
-                VK_VERSION_MINOR(extension.specVersion),
-                VK_VERSION_PATCH(extension.specVersion)
-            );
+            msg += "\n  - " + extensionMessage(extension);
         }
         BOOST_LOG_TRIVIAL(trace) << msg;
     }
 
-    void logGlobalLayers(vk::raii::Context &context) {
+    void logInstanceLayers(const vk::raii::Context &context) {
         const std::vector<vk::LayerProperties> layers = context.enumerateInstanceLayerProperties();
         std::string msg = std::format("There are {} instance layers:", layers.size());
         for (const auto& layer : layers) {
-            msg += std::format(
-                "\n  - {}, spec version: {}.{}.{}, implementation version: {}.{}.{} - {}", 
-                layer.layerName.data(),
-                VK_VERSION_MAJOR(layer.specVersion),
-                VK_VERSION_MINOR(layer.specVersion),
-                VK_VERSION_PATCH(layer.specVersion),
-                VK_VERSION_MAJOR(layer.implementationVersion),
-                VK_VERSION_MINOR(layer.implementationVersion),
-                VK_VERSION_PATCH(layer.implementationVersion),
-                layer.description.data()
-            );
+            msg += "\n  - " + layerMessage(layer);
 
             const std::vector<vk::ExtensionProperties> layer_extensions = 
                 context.enumerateInstanceExtensionProperties(std::string{layer.layerName.cbegin(), layer.layerName.cend()});
@@ -52,13 +63,7 @@ namespace vgraphplay {
             if (!layer_extensions.empty()) {
                 msg += std::format(", with {} layer extensions:", layer_extensions.size());
                 for (const auto& extension : layer_extensions) {
-                    msg += std::format(
-                        "\n    - {}, spec version {}.{}.{}", 
-                        extension.extensionName.data(),
-                        VK_VERSION_MAJOR(extension.specVersion),
-                        VK_VERSION_MINOR(extension.specVersion),
-                        VK_VERSION_PATCH(extension.specVersion)
-                    );
+                    msg += "\n    - " + extensionMessage(extension);
                 }
             }
         }
@@ -66,51 +71,50 @@ namespace vgraphplay {
         BOOST_LOG_TRIVIAL(trace) << msg;
     }
 
-    void logPhysicalDevices(VkInstance instance) {
-        std::ostringstream msg;
+    void logPhysicalDevices(const vk::raii::Instance &instance) {
+        std::vector<vk::raii::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
+        std::string msg = std::format("There are {} physical device(s):", devices.size());
 
-        uint32_t num_devices = 0;
-        vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
-        std::vector<VkPhysicalDevice> devices(num_devices);
-        vkEnumeratePhysicalDevices(instance, &num_devices, devices.data());
+        for (const auto &device : devices) {
+            auto props = device.getProperties();
+            auto features = device.getFeatures();
 
-        msg << "There are " << num_devices << " Physical Device(s)";
+            msg += std::format(
+                "\n  - Name: {}\n    Type: {}\n    Device ID: {}\n    Vendor ID: {}\n    API Version: {}\n    Driver Version: {}",
+                props.deviceName.data(),
+                vk::to_string(props.deviceType),
+                props.deviceID,
+                props.vendorID,
+                versionMessage(props.apiVersion),
+                versionMessage(props.driverVersion)
+            );
 
-        for (const auto& device : devices) {
-            VkPhysicalDeviceProperties props;
-            vkGetPhysicalDeviceProperties(device, &props);
-
-            msg << std::endl << "  Physical device: (" << device << ") " << props;
-
-            // VkPhysicalDeviceFeatures features;
-            // vkGetPhysicalDeviceFeatures(device, &features);
-            // print the features of this device...
-
-            uint32_t num_extensions;
-            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, nullptr);
-            std::vector<VkExtensionProperties> extensions(num_extensions);
-            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_extensions, extensions.data());
-
-            for (auto&& extension : extensions) {
-                msg << std::endl << "    Device Extension: " << extension;
+            const std::vector<vk::ExtensionProperties> extensions = device.enumerateDeviceExtensionProperties();
+            msg += std::format("\n    Supports {} device extensions:", extensions.size());
+            for (const auto& extension : extensions) {
+                msg += "\n    - " + extensionMessage(extension);
             }
 
-            uint32_t num_layers;
-            vkEnumerateDeviceLayerProperties(device, &num_layers, nullptr);
-            std::vector<VkLayerProperties> layers{num_layers};
-            vkEnumerateDeviceLayerProperties(device, &num_layers, layers.data());
-            for (auto&& layer : layers) {
-                msg << std::endl << "    Device Layer: " << layer;
+            const std::vector<vk::LayerProperties> layers = device.enumerateDeviceLayerProperties();
+            msg += std::format("\n    Supports {} device layers:", layers.size());
+            for (const auto &layer : layers) {
+                msg += "\n    - " + layerMessage(layer);
 
-                uint32_t num_layer_extensions;
-                vkEnumerateDeviceExtensionProperties(device, layer.layerName, &num_layer_extensions, nullptr);
-                std::vector<VkExtensionProperties> layer_extensions(num_layer_extensions);
-                vkEnumerateDeviceExtensionProperties(device, layer.layerName, &num_layer_extensions, layer_extensions.data());
+                const std::vector<vk::ExtensionProperties> layer_extensions = 
+                    device.enumerateDeviceExtensionProperties(std::string{layer.layerName.cbegin(), layer.layerName.cend()});
 
-                for (auto&& layer_extension : layer_extensions) {
-                    msg << std::endl << "      Device Layer Extension: " << layer_extension;
+                if (!layer_extensions.empty()) {
+                    msg += std::format(", with {} layer extensions:", layer_extensions.size());
+                    for (const auto& extension : layer_extensions) {
+                        msg += "\n      - " + extensionMessage(extension);
+                    }
                 }
             }
+        }
+
+        BOOST_LOG_TRIVIAL(trace) << msg;
+        /*
+        for (const auto& device : devices) {
 
             VkPhysicalDeviceMemoryProperties mem_props;
             vkGetPhysicalDeviceMemoryProperties(device, &mem_props);
@@ -136,7 +140,7 @@ namespace vgraphplay {
             }
         }
 
-        BOOST_LOG_TRIVIAL(trace) << msg.str();
+        BOOST_LOG_TRIVIAL(trace) << msg.str(); */
     }
 
     void logSurfaceCapabilities(VkPhysicalDevice device, VkSurfaceKHR surface) {

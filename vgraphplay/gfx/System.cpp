@@ -19,7 +19,9 @@
 #include "../VulkanOutput.h"
 
 bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name);
-std::vector<const char *> buildExtensionList(vk::raii::Context &context, bool debug);
+bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_name);
+std::vector<const char *> buildInstanceExtensionList(vk::raii::Context &context, bool debug);
+std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, bool debug);
 
 const Resource UNLIT_VERT_BYTECODE = LOAD_RESOURCE(unlit_vert_spv);
 const Resource UNLIT_FRAG_BYTECODE = LOAD_RESOURCE(unlit_frag_spv);
@@ -45,41 +47,36 @@ const uint16_t RECTANGLE_INDICES[NUM_RECTANGLE_INDICES] = {
     4, 5, 6, 6, 7, 4,
 };
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugReportFlagsEXT flags,
-    VkDebugReportObjectTypeEXT object_type,
-    uint64_t object,
-    size_t location,
-    int32_t code,
-    const char *layer_prefix,
-    const char *message,
-    void *user_data
+static VKAPI_ATTR vk::Bool32 VKAPI_CALL handleDebugMessage(
+    vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+    vk::DebugUtilsMessageTypeFlagsEXT type,
+    const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
+    void *pUserData
 ) {
-    if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-        BOOST_LOG_TRIVIAL(error) << "Vulkan error: " << layer_prefix << ": " << message;
-    } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-        BOOST_LOG_TRIVIAL(warning) << "Vulkan warning: " << layer_prefix << ": " << message;
-    } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-        BOOST_LOG_TRIVIAL(warning) << "Vulkan performance warning: " << layer_prefix << ": " << message;
-    } else if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-        BOOST_LOG_TRIVIAL(info) << "Vulkan info: " << layer_prefix << ": " << message;
-    } else if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-        BOOST_LOG_TRIVIAL(debug) << "Vulkan debug: " << layer_prefix << ": " << message;
+    if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
+        BOOST_LOG_TRIVIAL(error) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+    } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
+        BOOST_LOG_TRIVIAL(warning) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+    } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo) {
+        BOOST_LOG_TRIVIAL(info) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+    } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose) {
+        BOOST_LOG_TRIVIAL(debug) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
     } else {
-        BOOST_LOG_TRIVIAL(warning) << "Vulkan unknown level: " << layer_prefix << ": " << message;
+        BOOST_LOG_TRIVIAL(warning) << "Validation layer (unknown level): type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
     }
 
-    return VK_FALSE;
+    return vk::False;
 }
 
 vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
-    : m_window{window},
+    : m_debug{debug},
+      m_window{window},
       m_context{},
-      m_instance{nullptr} /*,
-      m_debug_callback{VK_NULL_HANDLE},
-      m_device{VK_NULL_HANDLE},
-      m_physical_device{VK_NULL_HANDLE},
-      m_graphics_queue_family{0},
+      m_instance{nullptr},
+      m_debug_messenger{nullptr},
+      m_device{nullptr},
+      m_physical_device{nullptr}
+      /* m_graphics_queue_family{0},
       m_present_queue_family{0},
       m_graphics_queue{VK_NULL_HANDLE},
       m_present_queue{VK_NULL_HANDLE},
@@ -117,12 +114,12 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_image_available_semaphore{VK_NULL_HANDLE},
       m_render_finished_semaphore{VK_NULL_HANDLE} */
 {
-    initInstance(debug);
+    initInstance();
+    initDebugMessenger();
+    initDevice();
 }
 
-vgraphplay::gfx::System::~System() {
-    // dispose();
-}
+vgraphplay::gfx::System::~System() {}
 
 /* bool vgraphplay::gfx::System::initialize(bool debug) {
     bool rv = initInstance(debug);
@@ -215,16 +212,17 @@ void vgraphplay::gfx::System::recreateSwapchain() {
     rv = rv && recordCommandBuffers();
 } */
 
-void vgraphplay::gfx::System::initInstance(bool debug) {
+void vgraphplay::gfx::System::initInstance() {
     if (m_instance != nullptr) {
         return;
     }
 
-    logGlobalExtensions(m_context);
-    logGlobalLayers(m_context);
+    logInstanceExtensions(m_context);
+    logInstanceLayers(m_context);
 
     vk::InstanceCreateFlags flags;
-    std::vector<const char *> extension_names = buildExtensionList(m_context, debug);
+    std::vector<const char *> extension_names = buildInstanceExtensionList(m_context, m_debug);
+    std::vector<const char *> layer_names = buildInstanceLayerList(m_context, m_debug);
 
     // In addition to the extension that was checked for and added above, we
     // also need to pass this flag in.
@@ -243,119 +241,52 @@ void vgraphplay::gfx::System::initInstance(bool debug) {
     vk::InstanceCreateInfo inst_ci{
         .flags = flags,
         .pApplicationInfo = &app_info,
+        .enabledLayerCount = static_cast<uint32_t>(layer_names.size()),
+        .ppEnabledLayerNames = layer_names.data(),
         .enabledExtensionCount = static_cast<uint32_t>(extension_names.size()),
         .ppEnabledExtensionNames = extension_names.data(),
     };
 
     m_instance = vk::raii::Instance(m_context, inst_ci);
     BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << &m_instance;
-
-    // // The layers we need.
-    // std::vector<const char*> layer_names;
-
-    // // Add the standard validation layers if we're running in debug mode.
-    // if (debug) {
-    //     layer_names.emplace_back("VK_LAYER_KHRONOS_validation");
-    // }
-
-    // // Make sure we have the layers we need.
-    // uint32_t num_layers;
-    // vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
-    // std::vector<VkLayerProperties> instance_layers{num_layers};
-    // vkEnumerateInstanceLayerProperties(&num_layers, instance_layers.data());
-    // for (unsigned int i = 0; i < layer_names.size(); ++i) {
-    //     bool found = false;
-    //     std::string wanted_layer_name{layer_names[i]};
-    //     for (unsigned int j = 0; j < instance_layers.size(); ++j) {
-    //         std::string layer_name{instance_layers[j].layerName};
-    //         if (wanted_layer_name == layer_name) {
-    //             found = true;
-    //             break;
-    //         }
-    //     }
-
-    //     if (!found) {
-    //         BOOST_LOG_TRIVIAL(error) << "Unable to find layer " << layer_names[i] << ". Cannot continue.";
-    //         return;
-    //     }
-    // }
-
-    // VkInstanceCreateInfo inst_ci;
-    // inst_ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    // inst_ci.pNext = nullptr;
-    // inst_ci.flags = 0;
-    // inst_ci.pApplicationInfo = nullptr;
-    // inst_ci.enabledLayerCount = (uint32_t)layer_names.size();
-    // inst_ci.ppEnabledLayerNames = layer_names.data();
-    // inst_ci.enabledExtensionCount = static_cast<uint32_t>(extension_names.size());
-    // inst_ci.ppEnabledExtensionNames = extension_names.data();
-
-    // VkResult rslt = vkCreateInstance(&inst_ci, nullptr, &m_instance);
-    // if (rslt == VK_SUCCESS) {
-    //     BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << m_instance;
-    //     return;
-    // } else {
-    //     BOOST_LOG_TRIVIAL(error) << "Error creating Vulkan instance: " << rslt;
-    //     return;
-    // }
 }
 
-/* void vgraphplay::gfx::System::cleanupInstance() {
-    if (m_instance != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying Vulkan instance: " << m_instance;
-        vkDestroyInstance(m_instance, nullptr);
-        m_instance = VK_NULL_HANDLE;
+void vgraphplay::gfx::System::initDebugMessenger() {
+    if (!m_debug || m_debug_messenger != nullptr) {
+        return;
     }
+
+    if (m_instance == nullptr) {
+        throw new std::runtime_error("Cannot create debug messenger; Vulkan instance is null");
+    }
+
+    vk::DebugUtilsMessengerCreateInfoEXT dm_ci{
+        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding,
+        .pfnUserCallback = handleDebugMessage,
+    };
+
+    m_debug_messenger = m_instance.createDebugUtilsMessengerEXT(dm_ci);
 }
 
-bool vgraphplay::gfx::System::initDebugCallback() {
-    if (m_instance == VK_NULL_HANDLE || m_debug_callback != VK_NULL_HANDLE) {
-        return true;
+void vgraphplay::gfx::System::initDevice() {
+    if (m_device != nullptr) {
+        return;
     }
 
-    VkDebugReportCallbackCreateInfoEXT drc_ci;
-    drc_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    drc_ci.pNext = nullptr;
-    drc_ci.flags =
-        VK_DEBUG_REPORT_ERROR_BIT_EXT |
-        VK_DEBUG_REPORT_WARNING_BIT_EXT |
-        VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT; // |
-        // VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-        // VK_DEBUG_REPORT_DEBUG_BIT_EXT;
-    drc_ci.pfnCallback = debugCallback;
-    drc_ci.pUserData = nullptr;
-
-    VkResult rslt = vkCreateDebugReportCallbackEXT(m_instance, &drc_ci, nullptr, &m_debug_callback);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Debug report callback created: " << m_debug_callback;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating debug report callback: " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupDebugCallback() {
-    if (m_instance != VK_NULL_HANDLE && m_debug_callback != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying debug report callback: " << m_debug_callback;
-        vkDestroyDebugReportCallbackEXT(m_instance, m_debug_callback, nullptr);
-        m_debug_callback = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initDevice() {
-    if (m_device != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_instance == VK_NULL_HANDLE || m_surface == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create device.";
-        return false;
+    if (m_instance == nullptr) {
+        throw new std::runtime_error("Cannot create device; Vulkan instance is null");
     }
 
     logPhysicalDevices(m_instance);
 
-    uint32_t num_devices;
+    /* uint32_t num_devices;
     vkEnumeratePhysicalDevices(m_instance, &num_devices, nullptr);
     std::vector<VkPhysicalDevice> devices(num_devices);
     vkEnumeratePhysicalDevices(m_instance, &num_devices, devices.data());
@@ -425,21 +356,13 @@ bool vgraphplay::gfx::System::initDevice() {
     } else {
         BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
         return false;
-    }
+    } */
 }
 
-void vgraphplay::gfx::System::cleanupDevice() {
-    if (m_device != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying device: " << m_device;
-        vkDestroyDevice(m_device, nullptr);
-        m_device = VK_NULL_HANDLE;
-    }
-}
-
-vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface) {
+vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<vk::PhysicalDevice> &devices, vk::SurfaceKHR &surface) {
     const uint32_t MAX_INT = std::numeric_limits<uint32_t>::max();
 
-    for (auto &dev : devices) {
+    /* for (auto &dev : devices) {
         // Do we support the required properties & features?
         // VkPhysicalDeviceProperties props;
         VkPhysicalDeviceFeatures features;
@@ -505,16 +428,16 @@ vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(
                 present_queue,
             };
         }
-    }
+    } */
 
     return {
-        VK_NULL_HANDLE,
+        nullptr,
         MAX_INT,
         MAX_INT,
     };
 }
 
-bool vgraphplay::gfx::System::initSurface() {
+/* bool vgraphplay::gfx::System::initSurface() {
     if (m_surface != VK_NULL_HANDLE) {
         return true;
     }
@@ -2358,7 +2281,16 @@ bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const ch
     );
 }
 
-std::vector<const char *> buildExtensionList(vk::raii::Context &context, bool debug) {
+bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_name) {
+    return std::ranges::any_of(
+        all_layers,
+        [layer_name](auto const &layer) {
+            return strcmp(layer.layerName, layer_name) == 0;
+        }
+    );
+}
+
+std::vector<const char *> buildInstanceExtensionList(vk::raii::Context &context, bool debug) {
     std::vector<const char *> rv;
     auto all_extensions = context.enumerateInstanceExtensionProperties();
 
@@ -2388,5 +2320,24 @@ std::vector<const char *> buildExtensionList(vk::raii::Context &context, bool de
     }
     #endif
 
+    return rv;
+}
+
+std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, bool debug) {
+    std::vector<const char *> rv;
+
+    std::vector<vk::LayerProperties> all_layers = context.enumerateInstanceLayerProperties();
+    std::vector<const char *> required_layers{
+        "VK_LAYER_KHRONOS_validation"
+    };
+    
+    for (auto &layer_name : required_layers) {
+        if (hasLayer(all_layers, layer_name)) {
+            rv.push_back(layer_name);
+        } else {
+            throw std::runtime_error("Required instance layer not found: " + std::string{layer_name});
+        }
+    }
+    
     return rv;
 }

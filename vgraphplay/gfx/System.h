@@ -32,7 +32,7 @@ namespace vgraphplay {
         };
 
         struct ChosenDeviceInfo {
-            VkPhysicalDevice dev;
+            vk::PhysicalDevice dev;
             uint32_t graphics_queue_family;
             uint32_t present_queue_family;
         };
@@ -46,17 +46,13 @@ namespace vgraphplay {
             void setFramebufferResized();
 
         private:
-            void initInstance(bool debug);
-            /* void cleanupInstance();
+            void initInstance();
+            void initDebugMessenger();
 
-            bool initDebugCallback();
-            void cleanupDebugCallback();
+            void initDevice();
+            ChosenDeviceInfo choosePhysicalDevice(std::vector<vk::PhysicalDevice> &devices, vk::SurfaceKHR &surface);
 
-            bool initDevice();
-            void cleanupDevice();
-            ChosenDeviceInfo choosePhysicalDevice(std::vector<VkPhysicalDevice> &devices, VkSurfaceKHR &surface);
-
-            bool initSurface();
+            /* bool initSurface();
             void cleanupSurface();
 
             bool initSwapchain();
@@ -135,16 +131,17 @@ namespace vgraphplay {
             VkCommandBuffer beginOneTimeCommands();
             bool endOneTimeCommands(VkCommandBuffer commands); */
 
+            bool m_debug;
             GLFWwindow *m_window;
 
             // Instance, device, and debug callback.
             vk::raii::Context m_context;
             vk::raii::Instance m_instance;
-            /* VkDebugReportCallbackEXT m_debug_callback;
-            VkDevice m_device;
-            VkPhysicalDevice m_physical_device;
+            vk::raii::DebugUtilsMessengerEXT m_debug_messenger;
+            vk::raii::Device m_device;
+            vk::PhysicalDevice m_physical_device;
 
-            // Command queues / buffers / pool.
+            /* // Command queues / buffers / pool.
             uint32_t m_graphics_queue_family;
             uint32_t m_present_queue_family;
             VkQueue m_graphics_queue;

@@ -15,32 +15,9 @@
 #include "VulkanOutput.h"
 
 namespace vgraphplay {
-    std::string versionMessage(uint32_t version) {
-        return std::format(
-            "{}.{}.{}",
-            VK_VERSION_MAJOR(version),
-            VK_VERSION_MINOR(version),
-            VK_VERSION_PATCH(version)
-        );
-    }
-
-    std::string extensionMessage(const vk::ExtensionProperties &ext_props) {
-        return std::format(
-            "{}, spec version {}", 
-            ext_props.extensionName.data(), 
-            versionMessage(ext_props.specVersion)
-        );
-    }
-
-    std::string layerMessage(const vk::LayerProperties &layer_props) {
-        return std::format(
-            "{}, spec version: {}, implementation version: {} - {}", 
-            layer_props.layerName.data(),
-            versionMessage(layer_props.specVersion),
-            versionMessage(layer_props.implementationVersion),
-            layer_props.description.data()
-        );
-    }
+    std::string versionMessage(uint32_t version);
+    std::string extensionMessage(const vk::ExtensionProperties &ext_props);
+    std::string layerMessage(const vk::LayerProperties &layer_props);
 
     void logInstanceExtensions(const vk::raii::Context &context) {
         const std::vector<vk::ExtensionProperties> extensions = context.enumerateInstanceExtensionProperties();
@@ -487,5 +464,32 @@ namespace vgraphplay {
         }
 
         return stream << " ]";
+    }
+
+    std::string versionMessage(uint32_t version) {
+        return std::format(
+            "{}.{}.{}",
+            VK_VERSION_MAJOR(version),
+            VK_VERSION_MINOR(version),
+            VK_VERSION_PATCH(version)
+        );
+    }
+
+    std::string extensionMessage(const vk::ExtensionProperties &ext_props) {
+        return std::format(
+            "{}, spec version {}", 
+            ext_props.extensionName.data(), 
+            versionMessage(ext_props.specVersion)
+        );
+    }
+
+    std::string layerMessage(const vk::LayerProperties &layer_props) {
+        return std::format(
+            "{}, spec version: {}, implementation version: {} - {}", 
+            layer_props.layerName.data(),
+            versionMessage(layer_props.specVersion),
+            versionMessage(layer_props.implementationVersion),
+            layer_props.description.data()
+        );
     }
 }

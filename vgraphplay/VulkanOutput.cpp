@@ -54,7 +54,6 @@ namespace vgraphplay {
 
         for (const auto &device : devices) {
             auto props = device.getProperties();
-            auto features = device.getFeatures();
 
             msg += std::format(
                 "\n  - Name: {}\n    Type: {}\n    Device ID: {}\n    Vendor ID: {}\n    API Version: {}\n    Driver Version: {}",

@@ -75,12 +75,12 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_instance{nullptr},
       m_debug_messenger{nullptr},
       m_device{nullptr},
-      m_physical_device{nullptr}
-      /* m_graphics_queue_family{0},
-      m_present_queue_family{0},
-      m_graphics_queue{VK_NULL_HANDLE},
-      m_present_queue{VK_NULL_HANDLE},
-      m_command_pool{VK_NULL_HANDLE},
+      m_physical_device{nullptr},
+      m_graphics_queue_family{0},
+      // m_present_queue_family{0},
+      m_graphics_queue{nullptr}
+      // m_present_queue{VK_NULL_HANDLE},
+      /* m_command_pool{VK_NULL_HANDLE},
       m_command_buffers{},
       m_vertex_buffer{VK_NULL_HANDLE},
       m_index_buffer{VK_NULL_HANDLE},
@@ -285,27 +285,41 @@ void vgraphplay::gfx::System::initDevice() {
     }
 
     logPhysicalDevices(m_instance);
-    std::vector<vk::raii::PhysicalDevice> physical_devices = m_instance.enumeratePhysicalDevices();
-    ChosenDeviceInfo chosen_device = choosePhysicalDevice(physical_devices);
+    const std::vector<vk::raii::PhysicalDevice> physical_devices = m_instance.enumeratePhysicalDevices();
+    m_physical_device = choosePhysicalDevice(physical_devices);
+    BOOST_LOG_TRIVIAL(trace) << "Chose physical device " << m_physical_device.getProperties().deviceName;
 
-    /* uint32_t num_devices;
-    vkEnumeratePhysicalDevices(m_instance, &num_devices, nullptr);
-    std::vector<VkPhysicalDevice> devices(num_devices);
-    vkEnumeratePhysicalDevices(m_instance, &num_devices, devices.data());
+    const std::vector<vk::QueueFamilyProperties> qfps = m_physical_device.getQueueFamilyProperties();
+    auto graphics_qfp = std::ranges::find_if(qfps, [](auto const &qfp) { return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics); });
+    m_graphics_queue_family = std::distance(qfps.begin(), graphics_qfp);
+    float graphics_queue_priority = 0.5f;
+    vk::DeviceQueueCreateInfo graphics_queue_ci{
+        .queueFamilyIndex = m_graphics_queue_family,
+        .queueCount = 1,
+        .pQueuePriorities = &graphics_queue_priority,
+    };
 
-    ChosenDeviceInfo chosen = choosePhysicalDevice(devices, m_surface);
+    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
+        {},                             // vk::PhysicalDeviceFeatures2, empty (for now)
+        {.dynamicRendering = true},     // Enable dynamic rendering from Vulkan 1.3
+        {.extendedDynamicState = true}, // Enable extended dynamic state from the extension
+    };
 
-    if (chosen.dev == VK_NULL_HANDLE) {
-        return false;
-    }
+    std::vector<const char *> required_device_extensions = {
+        vk::KHRSwapchainExtensionName,
+    };
 
-    m_physical_device = chosen.dev;
+    vk::DeviceCreateInfo device_ci = vk::DeviceCreateInfo{
+        .pNext = &feature_chain.get<vk::PhysicalDeviceFeatures2>(),
+    }.setQueueCreateInfos(graphics_queue_ci)
+        .setPEnabledExtensionNames(required_device_extensions);
 
-    BOOST_LOG_TRIVIAL(trace) << "physical device = " << m_physical_device
-                             << " graphics queue family = " << chosen.graphics_queue_family
-                             << " present queue family = " << chosen.present_queue_family;
+    m_device = vk::raii::Device(m_physical_device, device_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created device: " << &m_device;
+    m_graphics_queue = vk::raii::Queue(m_device, m_graphics_queue_family, 0);
+    BOOST_LOG_TRIVIAL(trace) << "Created graphics queue: " << &m_graphics_queue;
 
-    float queue_priority = 1.0;
+    /* float queue_priority = 1.0;
     std::vector<VkDeviceQueueCreateInfo> queue_cis;
     VkDeviceQueueCreateInfo queue_ci;
     queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -361,13 +375,14 @@ void vgraphplay::gfx::System::initDevice() {
     } */
 }
 
-vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */) {
+vk::raii::PhysicalDevice vgraphplay::gfx::System::choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */) {
     std::vector<const char *> required_extensions{
         vk::KHRSwapchainExtensionName
     };
 
     for (auto &dev : devices) {
         const vk::PhysicalDeviceProperties props = dev.getProperties();
+        const auto features = dev.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
         const std::vector<vk::ExtensionProperties> all_extensions = dev.enumerateDeviceExtensionProperties();
         const std::vector<vk::QueueFamilyProperties> queue_families = dev.getQueueFamilyProperties();
 
@@ -387,81 +402,12 @@ vgraphplay::gfx::ChosenDeviceInfo vgraphplay::gfx::System::choosePhysicalDevice(
                 );
             }
         );
-
-        if (supports_vulkan_13 && supports_graphics && supports_all_extensions) {
-            return {
-                dev,
-                0,
-                0
-            };
+        bool supports_dynamic_rendering = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering;
+        bool supports_dynamic_state = features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+        
+        if (supports_vulkan_13 && supports_graphics && supports_all_extensions && supports_dynamic_rendering && supports_dynamic_state) {
+            return dev;
         }
-
-        /*
-        // Do we support the required properties & features?
-        // VkPhysicalDeviceProperties props;
-        VkPhysicalDeviceFeatures features;
-        // vkGetPhysicalDeviceProperties(dev, &props);
-        vkGetPhysicalDeviceFeatures(dev, &features);
-
-        if (features.samplerAnisotropy != VK_TRUE) {
-            continue;
-        }
-
-        // Do we have queue families suitable for graphics / presentation?
-        uint32_t graphics_queue = MAX_INT, present_queue = MAX_INT, num_queue_families = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, nullptr);
-        std::vector<VkQueueFamilyProperties> queue_families{num_queue_families};
-        vkGetPhysicalDeviceQueueFamilyProperties(dev, &num_queue_families, queue_families.data());
-
-        for (uint32_t id = 0; id < queue_families.size(); ++id) {
-            if (graphics_queue == MAX_INT && queue_families[id].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                graphics_queue = id;
-            }
-
-            if (present_queue == MAX_INT) {
-                VkBool32 supports_present = false;
-                vkGetPhysicalDeviceSurfaceSupportKHR(dev, id, surface, &supports_present);
-                if (supports_present) {
-                    present_queue = id;
-                }
-            }
-        }
-
-        if (graphics_queue == MAX_INT && present_queue == MAX_INT) {
-            continue;
-        }
-
-        // Are the extensions / layers we want supported?
-        uint32_t num_extensions = 0;
-        vkEnumerateDeviceExtensionProperties(dev, nullptr, &num_extensions, nullptr);
-        std::vector<VkExtensionProperties> extensions{num_extensions};
-        vkEnumerateDeviceExtensionProperties(dev, nullptr, &num_extensions, extensions.data());
-
-        std::set<std::string> required_extensions = {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME
-        };
-
-        for (const auto &extension : extensions) {
-            required_extensions.erase(extension.extensionName);
-        }
-
-        if (!required_extensions.empty()) {
-            continue;
-        }
-
-        // Are swapchains supported, and are there surface formats / present modes we can use?
-        uint32_t num_formats = 0;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &num_formats, nullptr);
-        uint32_t num_present_modes = 0;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &num_present_modes, nullptr);
-
-        if (num_formats > 0 && num_present_modes > 0) {
-            return {
-                dev,
-                graphics_queue,
-                present_queue,
-            };
-        } */
     }
     
     throw std::runtime_error{"Could not find a suitable GPU"};

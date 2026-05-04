@@ -31,11 +31,11 @@ namespace vgraphplay {
             glm::mat4x4 projection;
         };
 
-        struct ChosenDeviceInfo {
-            vk::raii::PhysicalDevice dev;
-            uint32_t graphics_queue_family;
-            uint32_t present_queue_family;
-        };
+        // struct ChosenDeviceInfo {
+        //     vk::raii::PhysicalDevice dev;
+        //     uint32_t graphics_queue_family;
+        //     uint32_t present_queue_family;
+        // };
 
         class System {
         public:
@@ -50,7 +50,7 @@ namespace vgraphplay {
             void initDebugMessenger();
 
             void initDevice();
-            ChosenDeviceInfo choosePhysicalDevice(std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
+            vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
 
             /* bool initSurface();
             void cleanupSurface();
@@ -139,14 +139,14 @@ namespace vgraphplay {
             vk::raii::Instance m_instance;
             vk::raii::DebugUtilsMessengerEXT m_debug_messenger;
             vk::raii::Device m_device;
-            vk::PhysicalDevice m_physical_device;
+            vk::raii::PhysicalDevice m_physical_device;
 
-            /* // Command queues / buffers / pool.
+            // Command queues / buffers / pool.
             uint32_t m_graphics_queue_family;
-            uint32_t m_present_queue_family;
-            VkQueue m_graphics_queue;
-            VkQueue m_present_queue;
-            VkCommandPool m_command_pool;
+            // uint32_t m_present_queue_family;
+            vk::raii::Queue m_graphics_queue;
+            // vk::raii::Queue m_present_queue;
+            /* VkCommandPool m_command_pool;
             std::vector<VkCommandBuffer> m_command_buffers;
 
             // Draw data.

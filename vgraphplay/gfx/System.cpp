@@ -1,17 +1,18 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
-#include <chrono>
-#include <set>
+// #include <chrono>
+// #include <set>
+#include <format>
 #include <vector>
 
 #include <boost/log/trivial.hpp>
 
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+// #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+// #include <glm/glm.hpp>
+// #include <glm/gtc/matrix_transform.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+// #define STB_IMAGE_IMPLEMENTATION
+// #include <stb_image.h>
 
 #include "../vulkan.h"
 
@@ -53,16 +54,17 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL handleDebugMessage(
     const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
     void *pUserData
 ) {
+    std::string msg = std::format("Vulkan debug message: type: {} msg: {}", to_string(type), pCallbackData->pMessage);
     if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
-        BOOST_LOG_TRIVIAL(error) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+        BOOST_LOG_TRIVIAL(error) << msg;
     } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
-        BOOST_LOG_TRIVIAL(warning) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+        BOOST_LOG_TRIVIAL(warning) << msg;
     } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo) {
-        BOOST_LOG_TRIVIAL(info) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+        BOOST_LOG_TRIVIAL(info) << msg;
     } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose) {
-        BOOST_LOG_TRIVIAL(debug) << "Validation layer: type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+        BOOST_LOG_TRIVIAL(debug) << msg;
     } else {
-        BOOST_LOG_TRIVIAL(warning) << "Validation layer (unknown level): type: " << to_string(type) << " msg: " << pCallbackData->pMessage;
+        BOOST_LOG_TRIVIAL(warning) << msg << " (unknown severity: " << to_string(severity) << ")";
     }
 
     return vk::False;
@@ -217,8 +219,8 @@ void vgraphplay::gfx::System::initInstance() {
         return;
     }
 
-    logInstanceExtensions(m_context);
-    logInstanceLayers(m_context);
+    // logInstanceExtensions(m_context);
+    // logInstanceLayers(m_context);
 
     vk::InstanceCreateFlags flags;
     std::vector<const char *> extension_names = buildInstanceExtensionList(m_context, m_debug);
@@ -248,7 +250,7 @@ void vgraphplay::gfx::System::initInstance() {
     };
 
     m_instance = vk::raii::Instance(m_context, inst_ci);
-    BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << &m_instance;
+    BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << *m_instance;
 }
 
 void vgraphplay::gfx::System::initDebugMessenger() {
@@ -273,6 +275,7 @@ void vgraphplay::gfx::System::initDebugMessenger() {
     };
 
     m_debug_messenger = m_instance.createDebugUtilsMessengerEXT(dm_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created debug messenger: " << *m_debug_messenger;
 }
 
 void vgraphplay::gfx::System::initDevice() {
@@ -315,9 +318,9 @@ void vgraphplay::gfx::System::initDevice() {
         .setPEnabledExtensionNames(required_device_extensions);
 
     m_device = vk::raii::Device(m_physical_device, device_ci);
-    BOOST_LOG_TRIVIAL(trace) << "Created device: " << &m_device;
+    BOOST_LOG_TRIVIAL(trace) << "Created device: " << *m_device;
     m_graphics_queue = vk::raii::Queue(m_device, m_graphics_queue_family, 0);
-    BOOST_LOG_TRIVIAL(trace) << "Created graphics queue: " << &m_graphics_queue;
+    BOOST_LOG_TRIVIAL(trace) << "Created graphics queue: " << *m_graphics_queue;
 
     /* float queue_priority = 1.0;
     std::vector<VkDeviceQueueCreateInfo> queue_cis;

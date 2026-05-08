@@ -14,6 +14,9 @@
 // #define STB_IMAGE_IMPLEMENTATION
 // #include <stb_image.h>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include "../vulkan.h"
 
 #include "System.h"
@@ -76,48 +79,48 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_context{},
       m_instance{nullptr},
       m_debug_messenger{nullptr},
-      m_device{nullptr},
       m_physical_device{nullptr},
-      m_graphics_queue_family{0},
-      // m_present_queue_family{0},
-      m_graphics_queue{nullptr}
-      // m_present_queue{VK_NULL_HANDLE},
-      /* m_command_pool{VK_NULL_HANDLE},
-      m_command_buffers{},
-      m_vertex_buffer{VK_NULL_HANDLE},
-      m_index_buffer{VK_NULL_HANDLE},
-      m_uniform_buffers{},
-      m_vertex_buffer_memory{VK_NULL_HANDLE},
-      m_index_buffer_memory{VK_NULL_HANDLE},
-      m_uniform_buffers_memory{},
-      m_texture_image{VK_NULL_HANDLE},
-      m_texture_image_memory{VK_NULL_HANDLE},
-      m_texture_image_view{VK_NULL_HANDLE},
-      m_texture_sampler{VK_NULL_HANDLE},
-      m_surface{VK_NULL_HANDLE},
-      m_swapchain{VK_NULL_HANDLE},
-      m_swapchain_images{},
-      m_swapchain_image_views{},
-      m_swapchain_format{VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
-      m_swapchain_extent{0, 0},
-      m_framebuffer_resized{false},
-      m_depth_image{VK_NULL_HANDLE},
-      m_depth_image_memory{VK_NULL_HANDLE},
-      m_depth_image_view{VK_NULL_HANDLE},
-      m_vertex_shader_module{VK_NULL_HANDLE},
-      m_fragment_shader_module{VK_NULL_HANDLE},
-      m_pipeline_layout{VK_NULL_HANDLE},
-      m_descriptor_set_layout{VK_NULL_HANDLE},
-      m_descriptor_pool{VK_NULL_HANDLE},
-      m_descriptor_sets{},
-      m_render_pass{VK_NULL_HANDLE},
-      m_pipeline{VK_NULL_HANDLE},
-      m_swapchain_framebuffers{},
-      m_image_available_semaphore{VK_NULL_HANDLE},
-      m_render_finished_semaphore{VK_NULL_HANDLE} */
+      m_device{nullptr},
+      m_command_queue_family_index{~static_cast<uint32_t>(0)},
+      m_command_queue{nullptr},
+    //   m_present_queue{VK_NULL_HANDLE},
+    //   m_command_pool{VK_NULL_HANDLE},
+    //   m_command_buffers{},
+    //   m_vertex_buffer{VK_NULL_HANDLE},
+    //   m_index_buffer{VK_NULL_HANDLE},
+    //   m_uniform_buffers{},
+    //   m_vertex_buffer_memory{VK_NULL_HANDLE},
+    //   m_index_buffer_memory{VK_NULL_HANDLE},
+    //   m_uniform_buffers_memory{},
+    //   m_texture_image{VK_NULL_HANDLE},
+    //   m_texture_image_memory{VK_NULL_HANDLE},
+    //   m_texture_image_view{VK_NULL_HANDLE},
+    //   m_texture_sampler{VK_NULL_HANDLE},
+      m_surface{nullptr}
+    //   m_swapchain{VK_NULL_HANDLE},
+    //   m_swapchain_images{},
+    //   m_swapchain_image_views{},
+    //   m_swapchain_format{VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+    //   m_swapchain_extent{0, 0},
+    //   m_framebuffer_resized{false},
+    //   m_depth_image{VK_NULL_HANDLE},
+    //   m_depth_image_memory{VK_NULL_HANDLE},
+    //   m_depth_image_view{VK_NULL_HANDLE},
+    //   m_vertex_shader_module{VK_NULL_HANDLE},
+    //   m_fragment_shader_module{VK_NULL_HANDLE},
+    //   m_pipeline_layout{VK_NULL_HANDLE},
+    //   m_descriptor_set_layout{VK_NULL_HANDLE},
+    //   m_descriptor_pool{VK_NULL_HANDLE},
+    //   m_descriptor_sets{},
+    //   m_render_pass{VK_NULL_HANDLE},
+    //   m_pipeline{VK_NULL_HANDLE},
+    //   m_swapchain_framebuffers{},
+    //   m_image_available_semaphore{VK_NULL_HANDLE},
+    //   m_render_finished_semaphore{VK_NULL_HANDLE}
 {
     initInstance();
     initDebugMessenger();
+    initSurface();
     initDevice();
 }
 
@@ -259,7 +262,7 @@ void vgraphplay::gfx::System::initDebugMessenger() {
     }
 
     if (m_instance == nullptr) {
-        throw new std::runtime_error("Cannot create debug messenger; Vulkan instance is null");
+        throw std::runtime_error("Cannot create debug messenger; Vulkan instance is null");
     }
 
     vk::DebugUtilsMessengerCreateInfoEXT dm_ci{
@@ -269,8 +272,7 @@ void vgraphplay::gfx::System::initDebugMessenger() {
             vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
         .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
             vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-            vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding,
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
         .pfnUserCallback = handleDebugMessage,
     };
 
@@ -283,8 +285,8 @@ void vgraphplay::gfx::System::initDevice() {
         return;
     }
 
-    if (m_instance == nullptr) {
-        throw new std::runtime_error("Cannot create device; Vulkan instance is null");
+    if (m_instance == nullptr || m_surface == nullptr) {
+        throw std::runtime_error("Cannot create device; Vulkan instance or surface is null");
     }
 
     logPhysicalDevices(m_instance);
@@ -292,14 +294,26 @@ void vgraphplay::gfx::System::initDevice() {
     m_physical_device = choosePhysicalDevice(physical_devices);
     BOOST_LOG_TRIVIAL(trace) << "Chose physical device " << m_physical_device.getProperties().deviceName;
 
+    m_command_queue_family_index = ~0;
     const std::vector<vk::QueueFamilyProperties> qfps = m_physical_device.getQueueFamilyProperties();
-    auto graphics_qfp = std::ranges::find_if(qfps, [](auto const &qfp) { return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics); });
-    m_graphics_queue_family = std::distance(qfps.begin(), graphics_qfp);
-    float graphics_queue_priority = 0.5f;
-    vk::DeviceQueueCreateInfo graphics_queue_ci{
-        .queueFamilyIndex = m_graphics_queue_family,
+    for (uint32_t i = 0; i < qfps.size(); ++i) {
+        if (qfps[i].queueFlags & vk::QueueFlagBits::eGraphics && 
+            m_physical_device.getSurfaceSupportKHR(i, *m_surface))
+        {
+            m_command_queue_family_index = i;
+            break;
+        }
+    }
+
+    if (m_command_queue_family_index == ~0) {
+        throw std::runtime_error("Unable to find a queue family that supports graphics and presentation");
+    }
+
+    float command_queue_priority = 0.5f;
+    vk::DeviceQueueCreateInfo command_queue_ci{
+        .queueFamilyIndex = m_command_queue_family_index,
         .queueCount = 1,
-        .pQueuePriorities = &graphics_queue_priority,
+        .pQueuePriorities = &command_queue_priority,
     };
 
     vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
@@ -312,70 +326,14 @@ void vgraphplay::gfx::System::initDevice() {
         vk::KHRSwapchainExtensionName,
     };
 
-    vk::DeviceCreateInfo device_ci = vk::DeviceCreateInfo{
-        .pNext = &feature_chain.get<vk::PhysicalDeviceFeatures2>(),
-    }.setQueueCreateInfos(graphics_queue_ci)
+    vk::DeviceCreateInfo device_ci = vk::DeviceCreateInfo{.pNext = &feature_chain.get<vk::PhysicalDeviceFeatures2>()}
+        .setQueueCreateInfos(command_queue_ci)
         .setPEnabledExtensionNames(required_device_extensions);
 
     m_device = vk::raii::Device(m_physical_device, device_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created device: " << *m_device;
-    m_graphics_queue = vk::raii::Queue(m_device, m_graphics_queue_family, 0);
-    BOOST_LOG_TRIVIAL(trace) << "Created graphics queue: " << *m_graphics_queue;
-
-    /* float queue_priority = 1.0;
-    std::vector<VkDeviceQueueCreateInfo> queue_cis;
-    VkDeviceQueueCreateInfo queue_ci;
-    queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_ci.pNext = nullptr;
-    queue_ci.flags = 0;
-    queue_ci.queueFamilyIndex = chosen.graphics_queue_family;
-    queue_ci.queueCount = 1;
-    queue_ci.pQueuePriorities = &queue_priority;
-    queue_cis.push_back(queue_ci);
-
-    if (chosen.present_queue_family != chosen.graphics_queue_family) {
-        VkDeviceQueueCreateInfo queue_ci;
-        queue_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queue_ci.pNext = nullptr;
-        queue_ci.flags = 0;
-        queue_ci.queueFamilyIndex = chosen.present_queue_family;
-        queue_ci.queueCount = 1;
-        queue_ci.pQueuePriorities = &queue_priority;
-        queue_cis.push_back(queue_ci);
-    }
-
-    std::vector<const char*> extension_names;
-    extension_names.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
-    VkPhysicalDeviceFeatures device_features{};
-    device_features.samplerAnisotropy = VK_TRUE;
-
-    VkDeviceCreateInfo device_ci;
-    device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_ci.pNext = nullptr;
-    device_ci.flags = 0;
-    device_ci.queueCreateInfoCount = (uint32_t)queue_cis.size();
-    device_ci.pQueueCreateInfos = queue_cis.data();
-    device_ci.enabledLayerCount = 0;
-    device_ci.ppEnabledLayerNames = nullptr;
-    device_ci.pEnabledFeatures = &device_features;
-    device_ci.enabledExtensionCount = (uint32_t)extension_names.size();
-    device_ci.ppEnabledExtensionNames = extension_names.data();
-
-    VkResult rslt = vkCreateDevice(m_physical_device, &device_ci, nullptr, &m_device);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Device created: " << m_device;
-        m_graphics_queue_family = chosen.graphics_queue_family;
-        m_present_queue_family = chosen.present_queue_family;
-        vkGetDeviceQueue(m_device, m_graphics_queue_family, 0, &m_graphics_queue);
-        BOOST_LOG_TRIVIAL(trace) << "Graphics queue: " << m_graphics_queue;
-        vkGetDeviceQueue(m_device, m_present_queue_family, 0, &m_present_queue);
-        BOOST_LOG_TRIVIAL(trace) << "Present queue: " << m_present_queue;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating device " << rslt;
-        return false;
-    } */
+    m_command_queue = vk::raii::Queue(m_device, m_command_queue_family_index, 0);
+    BOOST_LOG_TRIVIAL(trace) << "Created command (graphics & presentation) queue: " << *m_command_queue;
 }
 
 vk::raii::PhysicalDevice vgraphplay::gfx::System::choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */) {
@@ -416,35 +374,26 @@ vk::raii::PhysicalDevice vgraphplay::gfx::System::choosePhysicalDevice(const std
     throw std::runtime_error{"Could not find a suitable GPU"};
 }
 
-/* bool vgraphplay::gfx::System::initSurface() {
-    if (m_surface != VK_NULL_HANDLE) {
-        return true;
+void vgraphplay::gfx::System::initSurface() {
+    if (m_surface != nullptr) {
+        return;
     }
 
-    if (m_instance == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create surface.";
-        return false;
+    if (m_instance == nullptr) {
+        throw std::runtime_error("Cannot create surface; Vulkan instance is null");
     }
 
-    VkResult rslt = glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created surface: " << m_surface;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating surface: " << rslt;
-        return false;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkResult rslt = glfwCreateWindowSurface(*m_instance, m_window, nullptr, &surface_);
+    if (rslt != VK_SUCCESS) {
+        throw std::runtime_error("Could nto create surface");
     }
+
+    m_surface = vk::raii::SurfaceKHR(m_instance, surface_);
+    BOOST_LOG_TRIVIAL(trace) << "Created surface: " << *m_surface;
 }
 
-void vgraphplay::gfx::System::cleanupSurface() {
-    if (m_instance != VK_NULL_HANDLE && m_surface != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying surface: " << m_surface;
-        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-        m_surface = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initSwapchain() {
+/* bool vgraphplay::gfx::System::initSwapchain() {
     if (m_swapchain != VK_NULL_HANDLE) {
         return true;
     }

@@ -52,10 +52,9 @@ namespace vgraphplay {
             void initDevice();
             vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
 
-            /* bool initSurface();
-            void cleanupSurface();
+            void initSurface();
 
-            bool initSwapchain();
+            /* bool initSwapchain();
             void cleanupSwapchain();
             VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
             VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
@@ -138,52 +137,50 @@ namespace vgraphplay {
             vk::raii::Context m_context;
             vk::raii::Instance m_instance;
             vk::raii::DebugUtilsMessengerEXT m_debug_messenger;
-            vk::raii::Device m_device;
             vk::raii::PhysicalDevice m_physical_device;
+            vk::raii::Device m_device;
 
             // Command queues / buffers / pool.
-            uint32_t m_graphics_queue_family;
-            // uint32_t m_present_queue_family;
-            vk::raii::Queue m_graphics_queue;
-            // vk::raii::Queue m_present_queue;
-            /* VkCommandPool m_command_pool;
-            std::vector<VkCommandBuffer> m_command_buffers;
+            uint32_t m_command_queue_family_index;
+            vk::raii::Queue m_command_queue;
+            // VkCommandPool m_command_pool;
+            // std::vector<VkCommandBuffer> m_command_buffers;
 
-            // Draw data.
-            VkBuffer m_vertex_buffer, m_index_buffer;
-            std::vector<VkBuffer> m_uniform_buffers;
-            VkDeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
-            std::vector<VkDeviceMemory> m_uniform_buffers_memory;
-            VkImage m_texture_image;
-            VkDeviceMemory m_texture_image_memory;
-            VkImageView m_texture_image_view;
-            VkSampler m_texture_sampler;
+            // // Draw data.
+            // VkBuffer m_vertex_buffer, m_index_buffer;
+            // std::vector<VkBuffer> m_uniform_buffers;
+            // VkDeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
+            // std::vector<VkDeviceMemory> m_uniform_buffers_memory;
+            // VkImage m_texture_image;
+            // VkDeviceMemory m_texture_image_memory;
+            // VkImageView m_texture_image_view;
+            // VkSampler m_texture_sampler;
 
             // Presentation-related structures.
-            VkSurfaceKHR m_surface;
-            VkSwapchainKHR m_swapchain;
-            std::vector<VkImage> m_swapchain_images;
-            std::vector<VkImageView> m_swapchain_image_views;
-            VkSurfaceFormatKHR m_swapchain_format;
-            VkExtent2D m_swapchain_extent;
-            bool m_framebuffer_resized;
-            VkImage m_depth_image;
-            VkDeviceMemory m_depth_image_memory;
-            VkImageView m_depth_image_view;
+            vk::raii::SurfaceKHR m_surface;
+            // VkSwapchainKHR m_swapchain;
+            // std::vector<VkImage> m_swapchain_images;
+            // std::vector<VkImageView> m_swapchain_image_views;
+            // VkSurfaceFormatKHR m_swapchain_format;
+            // VkExtent2D m_swapchain_extent;
+            // bool m_framebuffer_resized;
+            // VkImage m_depth_image;
+            // VkDeviceMemory m_depth_image_memory;
+            // VkImageView m_depth_image_view;
 
-            // Pipeline-related structures.
-            VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
-            VkPipelineLayout m_pipeline_layout;
-            VkDescriptorSetLayout m_descriptor_set_layout;
-            VkDescriptorPool m_descriptor_pool;
-            std::vector<VkDescriptorSet> m_descriptor_sets;
-            VkRenderPass m_render_pass;
-            VkPipeline m_pipeline;
-            std::vector<VkFramebuffer> m_swapchain_framebuffers;
+            // // Pipeline-related structures.
+            // VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
+            // VkPipelineLayout m_pipeline_layout;
+            // VkDescriptorSetLayout m_descriptor_set_layout;
+            // VkDescriptorPool m_descriptor_pool;
+            // std::vector<VkDescriptorSet> m_descriptor_sets;
+            // VkRenderPass m_render_pass;
+            // VkPipeline m_pipeline;
+            // std::vector<VkFramebuffer> m_swapchain_framebuffers;
 
-            // Semaphores.
-            VkSemaphore m_image_available_semaphore;
-            VkSemaphore m_render_finished_semaphore; */
+            // // Semaphores.
+            // VkSemaphore m_image_available_semaphore;
+            // VkSemaphore m_render_finished_semaphore;
         };
     }
 }

@@ -50,18 +50,14 @@ namespace vgraphplay {
             void initDebugMessenger();
 
             void initDevice();
-            vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
-
             void initSurface();
+            void initSwapchain();
+            // VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
+            // VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
+            // VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps);
+            // void recreateSwapchain();
 
-            /* bool initSwapchain();
-            void cleanupSwapchain();
-            VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
-            VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
-            VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps);
-            void recreateSwapchain();
-
-            bool initRenderPass();
+            /* bool initRenderPass();
             void cleanupRenderPass();
 
             bool initShaderModules();
@@ -158,10 +154,10 @@ namespace vgraphplay {
 
             // Presentation-related structures.
             vk::raii::SurfaceKHR m_surface;
-            // VkSwapchainKHR m_swapchain;
+            vk::raii::SwapchainKHR m_swapchain;
             // std::vector<VkImage> m_swapchain_images;
             // std::vector<VkImageView> m_swapchain_image_views;
-            // VkSurfaceFormatKHR m_swapchain_format;
+            vk::SurfaceFormatKHR m_swapchain_format;
             // VkExtent2D m_swapchain_extent;
             // bool m_framebuffer_resized;
             // VkImage m_depth_image;

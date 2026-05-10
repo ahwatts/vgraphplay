@@ -297,7 +297,7 @@ void vgraphplay::gfx::System::initDevice() {
     m_command_queue_family_index = ~0;
     const std::vector<vk::QueueFamilyProperties> qfps = m_physical_device.getQueueFamilyProperties();
     for (uint32_t i = 0; i < qfps.size(); ++i) {
-        if (qfps[i].queueFlags & vk::QueueFlagBits::eGraphics && 
+        if (qfps[i].queueFlags & vk::QueueFlagBits::eGraphics &&
             m_physical_device.getSurfaceSupportKHR(i, *m_surface))
         {
             m_command_queue_family_index = i;
@@ -326,6 +326,10 @@ void vgraphplay::gfx::System::initDevice() {
         vk::KHRSwapchainExtensionName,
     };
 
+    #ifdef __APPLE__
+    required_device_extensions.push_back("VK_KHR_portability_subset");
+    #endif
+
     vk::DeviceCreateInfo device_ci = vk::DeviceCreateInfo{.pNext = &feature_chain.get<vk::PhysicalDeviceFeatures2>()}
         .setQueueCreateInfos(command_queue_ci)
         .setPEnabledExtensionNames(required_device_extensions);
@@ -341,6 +345,10 @@ vk::raii::PhysicalDevice vgraphplay::gfx::System::choosePhysicalDevice(const std
         vk::KHRSwapchainExtensionName
     };
 
+    #ifdef __APPLE__
+    required_extensions.push_back("VK_KHR_portability_subset");
+    #endif
+
     for (auto &dev : devices) {
         const vk::PhysicalDeviceProperties props = dev.getProperties();
         const auto features = dev.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
@@ -349,7 +357,7 @@ vk::raii::PhysicalDevice vgraphplay::gfx::System::choosePhysicalDevice(const std
 
         bool supports_vulkan_13 = props.apiVersion >= vk::ApiVersion13;
         bool supports_graphics = std::ranges::any_of(
-            queue_families, 
+            queue_families,
             [](const auto &qfp) { return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics); }
         );
         bool supports_all_extensions = std::ranges::all_of(
@@ -365,12 +373,12 @@ vk::raii::PhysicalDevice vgraphplay::gfx::System::choosePhysicalDevice(const std
         );
         bool supports_dynamic_rendering = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering;
         bool supports_dynamic_state = features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
-        
+
         if (supports_vulkan_13 && supports_graphics && supports_all_extensions && supports_dynamic_rendering && supports_dynamic_state) {
             return dev;
         }
     }
-    
+
     throw std::runtime_error{"Could not find a suitable GPU"};
 }
 
@@ -2258,7 +2266,7 @@ std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, boo
     std::vector<const char *> required_layers{
         "VK_LAYER_KHRONOS_validation"
     };
-    
+
     for (auto &layer_name : required_layers) {
         if (hasLayer(all_layers, layer_name)) {
             rv.push_back(layer_name);
@@ -2266,6 +2274,6 @@ std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, boo
             throw std::runtime_error("Required instance layer not found: " + std::string{layer_name});
         }
     }
-    
+
     return rv;
 }

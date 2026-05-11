@@ -7,9 +7,6 @@
 
 #include <boost/log/trivial.hpp>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #include "vulkan.h"
 
 #include "VulkanOutput.h"
@@ -34,7 +31,7 @@ namespace vgraphplay {
         for (const auto& layer : layers) {
             msg += "\n  - " + layerMessage(layer);
 
-            const std::vector<vk::ExtensionProperties> layer_extensions = 
+            const std::vector<vk::ExtensionProperties> layer_extensions =
                 context.enumerateInstanceExtensionProperties(std::string{layer.layerName.cbegin(), layer.layerName.cend()});
 
             if (!layer_extensions.empty()) {
@@ -76,7 +73,7 @@ namespace vgraphplay {
             // for (const auto &layer : layers) {
             //     msg += "\n    - " + layerMessage(layer);
 
-            //     const std::vector<vk::ExtensionProperties> layer_extensions = 
+            //     const std::vector<vk::ExtensionProperties> layer_extensions =
             //         device.enumerateDeviceExtensionProperties(std::string{layer.layerName.cbegin(), layer.layerName.cend()});
 
             //     if (!layer_extensions.empty()) {
@@ -476,15 +473,15 @@ namespace vgraphplay {
 
     std::string extensionMessage(const vk::ExtensionProperties &ext_props) {
         return std::format(
-            "{}, spec version {}", 
-            ext_props.extensionName.data(), 
+            "{}, spec version {}",
+            ext_props.extensionName.data(),
             versionMessage(ext_props.specVersion)
         );
     }
 
     std::string layerMessage(const vk::LayerProperties &layer_props) {
         return std::format(
-            "{}, spec version: {}, implementation version: {} - {}", 
+            "{}, spec version: {}, implementation version: {} - {}",
             layer_props.layerName.data(),
             versionMessage(layer_props.specVersion),
             versionMessage(layer_props.implementationVersion),

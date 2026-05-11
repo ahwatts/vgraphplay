@@ -155,10 +155,10 @@ namespace vgraphplay {
             // Presentation-related structures.
             vk::raii::SurfaceKHR m_surface;
             vk::raii::SwapchainKHR m_swapchain;
+            vk::SurfaceFormatKHR m_swapchain_format;
+            vk::Extent2D m_swapchain_extent;
             // std::vector<VkImage> m_swapchain_images;
             // std::vector<VkImageView> m_swapchain_image_views;
-            vk::SurfaceFormatKHR m_swapchain_format;
-            // VkExtent2D m_swapchain_extent;
             // bool m_framebuffer_resized;
             // VkImage m_depth_image;
             // VkDeviceMemory m_depth_image_memory;

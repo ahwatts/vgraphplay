@@ -24,6 +24,8 @@
 
 vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
 vk::SurfaceFormatKHR chooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR> &available_formats);
+vk::PresentModeKHR chooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR> &available_modes);
+vk::Extent2D chooseSwapchainExtent(GLFWwindow *window, const vk::SurfaceCapabilitiesKHR &caps);
 
 bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name);
 bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_name);
@@ -101,10 +103,10 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     //   m_texture_sampler{VK_NULL_HANDLE},
       m_surface{nullptr},
       m_swapchain{nullptr},
+      m_swapchain_format{},
+      m_swapchain_extent{0, 0}
     //   m_swapchain_images{},
     //   m_swapchain_image_views{},
-      m_swapchain_format{}
-    //   m_swapchain_extent{0, 0},
     //   m_framebuffer_resized{false},
     //   m_depth_image{VK_NULL_HANDLE},
     //   m_depth_image_memory{VK_NULL_HANDLE},
@@ -414,6 +416,27 @@ vk::SurfaceFormatKHR chooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceF
     return format != available_formats.end() ? *format : available_formats[0];
 }
 
+vk::PresentModeKHR chooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR> &available_modes) {
+    bool has_mailbox = std::ranges::any_of(
+        available_modes,
+        [](const auto mode) { return vk::PresentModeKHR::eMailbox == mode; }
+    );
+
+    return has_mailbox ? vk::PresentModeKHR::eMailbox : vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D chooseSwapchainExtent(GLFWwindow *window, const vk::SurfaceCapabilitiesKHR &caps) {
+    if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+        return caps.currentExtent;
+    }
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+    return {
+        std::clamp<uint32_t>(width, caps.minImageExtent.width, caps.maxImageExtent.width),
+        std::clamp<uint32_t>(height, caps.minImageExtent.height, caps.maxImageExtent.height),
+    };
+}
+
 void vgraphplay::gfx::System::initSwapchain() {
     if (m_swapchain != nullptr) {
         return;
@@ -428,8 +451,8 @@ void vgraphplay::gfx::System::initSwapchain() {
     std::vector<vk::PresentModeKHR> modes = m_physical_device.getSurfacePresentModesKHR(*m_surface);
 
     m_swapchain_format = chooseSwapchainSurfaceFormat(formats);
-
-    // m_swapchain_extent = chooseSwapExtent(surf_caps);
+    m_swapchain_extent = chooseSwapchainExtent(m_window, surf_caps);
+    vk::PresentModeKHR present_mode = chooseSwapchainPresentMode(modes);
 
     // // Use one more than the minimum, unless that would
     // // put us over the maximum.
@@ -437,13 +460,6 @@ void vgraphplay::gfx::System::initSwapchain() {
     // if (surf_caps.maxImageCount > 0 && image_count > surf_caps.maxImageCount) {
     //     image_count = surf_caps.maxImageCount;
     // }
-
-    // uint32_t num_modes;
-    // vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, m_surface, &num_modes, nullptr);
-    // std::vector<VkPresentModeKHR> modes(num_modes);
-    // vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, m_surface, &num_modes, modes.data());
-
-    // VkPresentModeKHR present_mode = choosePresentMode(modes);
 
     // std::vector<uint32_t> queue_families;
     // VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
@@ -499,71 +515,7 @@ void vgraphplay::gfx::System::initSwapchain() {
     // return true;
 }
 
-/* void vgraphplay::gfx::System::cleanupSwapchain() {
-    if (m_device != VK_NULL_HANDLE) {
-        for (auto&& view : m_swapchain_image_views) {
-            if (view != VK_NULL_HANDLE) {
-                BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain image view: " << view;
-                vkDestroyImageView(m_device, view, nullptr);
-            }
-        }
-        m_swapchain_image_views.clear();
-    }
-
-    if (m_device != VK_NULL_HANDLE && m_swapchain != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain: " << m_swapchain;
-        vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-        m_swapchain = VK_NULL_HANDLE;
-    }
-
-    m_swapchain_images.clear();
-    m_swapchain_format = { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-    m_swapchain_extent = { 0, 0 };
-}
-
-VkSurfaceFormatKHR vgraphplay::gfx::System::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats) {
-    // If it doesn't care, go with what we want.
-    if (formats.size() == 1 && formats[0].format == VK_FORMAT_UNDEFINED) {
-        return { VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-    }
-
-    // If what we want is available, go with it.
-    for (const auto &format : formats) {
-        if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return format;
-        }
-    }
-
-    // Otherwise, just settle for the first one?
-    return formats[0];
-}
-
-VkPresentModeKHR vgraphplay::gfx::System::choosePresentMode(const std::vector<VkPresentModeKHR> &modes) {
-    // Prefer mailbox over fifo, if it's available.
-    for (const auto &mode: modes) {
-        if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return mode;
-        }
-    }
-
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-
-VkExtent2D vgraphplay::gfx::System::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps) {
-    if (surf_caps.currentExtent.width != UINT32_MAX) {
-        return surf_caps.currentExtent;
-    }
-
-    int width, height;
-    glfwGetFramebufferSize(m_window, &width, &height);
-
-    VkExtent2D extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
-    extent.width  = std::max(surf_caps.minImageExtent.width,  std::min(surf_caps.maxImageExtent.width,  extent.width));
-    extent.height = std::max(surf_caps.minImageExtent.height, std::min(surf_caps.maxImageExtent.height, extent.height));
-    return extent;
-}
-
-bool vgraphplay::gfx::System::initRenderPass() {
+/* bool vgraphplay::gfx::System::initRenderPass() {
     if (m_render_pass != VK_NULL_HANDLE) {
         return true;
     }

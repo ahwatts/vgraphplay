@@ -159,7 +159,7 @@ namespace vgraphplay {
             uint32_t m_swapchain_image_count;
             vk::raii::SwapchainKHR m_swapchain;
             std::vector<vk::Image> m_swapchain_images;
-            std::vector<vk::ImageView> m_swapchain_image_views;
+            std::vector<vk::raii::ImageView> m_swapchain_image_views;
             // bool m_framebuffer_resized;
             // VkImage m_depth_image;
             // VkDeviceMemory m_depth_image_memory;

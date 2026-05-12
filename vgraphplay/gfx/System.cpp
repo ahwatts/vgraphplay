@@ -133,15 +133,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
 vgraphplay::gfx::System::~System() {}
 
 /* bool vgraphplay::gfx::System::initialize(bool debug) {
-    bool rv = initInstance(debug);
-
-    if (rv && debug) {
-        rv = rv && initDebugCallback();
-    }
-
-    rv = rv && initSurface();
-    rv = rv && initDevice();
-    rv = rv && initSwapchain();
     rv = rv && initShaderModules();
     rv = rv && initRenderPass();
     rv = rv && initDescriptorSetLayout();
@@ -163,34 +154,6 @@ vgraphplay::gfx::System::~System() {}
     rv = rv && recordCommandBuffers();
 
     return rv;
-}
-
-void vgraphplay::gfx::System::dispose() {
-    if (m_device != VK_NULL_HANDLE) {
-        vkDeviceWaitIdle(m_device);
-    }
-
-    cleanupCommandPool();
-    cleanupSemaphores();
-    cleanupSwapchainFramebuffers();
-    cleanupPipeline();
-    cleanupPipelineLayout();
-    cleanupDescriptorSetLayout();
-    cleanupRenderPass();
-    cleanupShaderModules();
-    cleanupSwapchain();
-    cleanupDescriptorPool();
-    cleanupUniformBuffers();
-    cleanupIndexBuffer();
-    cleanupVertexBuffer();
-    cleanupTextureSampler();
-    cleanupTextureImageView();
-    cleanupTextureImage();
-    cleanupDepthResources();
-    cleanupDevice();
-    cleanupSurface();
-    cleanupDebugCallback();
-    cleanupInstance();
 }
 
 void vgraphplay::gfx::System::recreateSwapchain() {
@@ -493,7 +456,7 @@ void vgraphplay::gfx::System::initSwapchain() {
 
     for (auto &image : m_swapchain_images) {
         imgv_ci.image = image;
-        m_swapchain_image_views.push_back(m_device.createImageView(imgv_ci));
+        m_swapchain_image_views.emplace_back(m_device, imgv_ci);
     }
     BOOST_LOG_TRIVIAL(trace) << "Created " << m_swapchain_image_views.size() << " swapchain image views";
 }

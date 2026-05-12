@@ -29,8 +29,8 @@ int main(int argc, char** argv) {
 
     boost::filesystem::ifstream ifs{src, ios::binary};
 
-    ofs << "#include <cstdlib>" << endl;
-    ofs << "extern const unsigned char _resource_" << sym << "[] = {" << endl;
+    ofs << "#include <vector>" << endl;
+    ofs << "extern const std::vector<unsigned char> _resource_" << sym << " = {" << endl;
 
     size_t lineCount = 0;
     while (true) {
@@ -49,7 +49,6 @@ int main(int argc, char** argv) {
     }
 
     ofs << "};" << endl;
-    ofs << "extern const std::size_t _resource_" << sym << "_len = sizeof(_resource_" << sym << ");";
 
     return EXIT_SUCCESS;
 }

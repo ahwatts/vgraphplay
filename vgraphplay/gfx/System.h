@@ -52,9 +52,7 @@ namespace vgraphplay {
             void initDevice();
             void initSurface();
             void initSwapchain();
-            // VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
-            // VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes);
-            // VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surf_caps);
+            void initPipeline();
             // void recreateSwapchain();
 
             /* bool initRenderPass();

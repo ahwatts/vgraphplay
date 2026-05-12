@@ -20,7 +20,7 @@ function(compile_spirv out_var)
     file(RELATIVE_PATH dst_file ${CMAKE_SOURCE_DIR} ${out_file})
     add_custom_command(
       OUTPUT ${out_file}
-      COMMAND glslangValidator -V -o ${dst_file} ${src_file}
+      COMMAND slangc ${src_file} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vs_main -entry fs_main -o ${out_file}
       DEPENDS ${in_file}
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
       COMMENT "Building SPIR-V binary ${dst_file}"
@@ -98,8 +98,7 @@ add_subdirectory(vendor/embed-resource)
 add_subdirectory(vendor/stb)
 
 compile_spirv(SPIRV_SHADERS
-  shaders/unlit.frag
-  shaders/unlit.vert)
+  shaders/unlit.slang)
 
 embed_resources(EMBEDDED_SHADERS ${SPIRV_SHADERS})
 embed_resources(EMBEDDED_TEXTURES textures/warren.jpg)

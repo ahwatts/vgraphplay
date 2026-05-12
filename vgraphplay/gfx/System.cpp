@@ -29,10 +29,8 @@ bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_na
 std::vector<const char *> buildInstanceExtensionList(vk::raii::Context &context, bool debug);
 std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, bool debug);
 
-const Resource UNLIT_VERT_BYTECODE = LOAD_RESOURCE(unlit_vert_spv);
-const Resource UNLIT_FRAG_BYTECODE = LOAD_RESOURCE(unlit_frag_spv);
-
-const Resource WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
+const std::vector<unsigned char> &UNLIT_BYTECODE = LOAD_RESOURCE(unlit_slang_spv);
+const std::vector<unsigned char> &WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
 
 const uint16_t NUM_RECTANGLE_VERTICES = 8;
 const vgraphplay::gfx::Vertex RECTANGLE_VERTICES[NUM_RECTANGLE_VERTICES] = {
@@ -128,6 +126,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initSurface();
     initDevice();
     initSwapchain();
+    initPipeline();
 }
 
 vgraphplay::gfx::System::~System() {}
@@ -459,6 +458,10 @@ void vgraphplay::gfx::System::initSwapchain() {
         m_swapchain_image_views.emplace_back(m_device, imgv_ci);
     }
     BOOST_LOG_TRIVIAL(trace) << "Created " << m_swapchain_image_views.size() << " swapchain image views";
+}
+
+void vgraphplay::gfx::System::initPipeline() {
+    // vk::raii::
 }
 
 /* bool vgraphplay::gfx::System::initRenderPass() {

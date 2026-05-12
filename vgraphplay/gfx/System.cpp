@@ -85,6 +85,13 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_device{nullptr},
       m_command_queue_family_index{~static_cast<uint32_t>(0)},
       m_command_queue{nullptr},
+      m_surface{nullptr},
+      m_swapchain_format{},
+      m_swapchain_extent{0, 0},
+      m_swapchain_image_count{0},
+      m_swapchain{nullptr},
+      m_swapchain_images{},
+      m_swapchain_image_views{}
     //   m_present_queue{VK_NULL_HANDLE},
     //   m_command_pool{VK_NULL_HANDLE},
     //   m_command_buffers{},
@@ -98,10 +105,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     //   m_texture_image_memory{VK_NULL_HANDLE},
     //   m_texture_image_view{VK_NULL_HANDLE},
     //   m_texture_sampler{VK_NULL_HANDLE},
-      m_surface{nullptr},
-      m_swapchain{nullptr},
-      m_swapchain_format{},
-      m_swapchain_extent{0, 0}
     //   m_swapchain_images{},
     //   m_swapchain_image_views{},
     //   m_framebuffer_resized{false},
@@ -451,65 +454,48 @@ void vgraphplay::gfx::System::initSwapchain() {
     m_swapchain_extent = chooseSwapchainExtent(m_window, surf_caps);
     vk::PresentModeKHR present_mode = chooseSwapchainPresentMode(modes);
 
-    // // Use one more than the minimum, unless that would
-    // // put us over the maximum.
-    // uint32_t image_count = surf_caps.minImageCount + 1;
-    // if (surf_caps.maxImageCount > 0 && image_count > surf_caps.maxImageCount) {
-    //     image_count = surf_caps.maxImageCount;
-    // }
+    m_swapchain_image_count = std::max(3u, surf_caps.minImageCount);
+    if ((surf_caps.maxImageCount > 0) && (surf_caps.maxImageCount < m_swapchain_image_count)) {
+        m_swapchain_image_count = surf_caps.maxImageCount;
+    }
 
-    // std::vector<uint32_t> queue_families;
-    // VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-    // queue_families.emplace_back(m_graphics_queue_family);
-    // if (m_graphics_queue_family != m_present_queue_family) {
-    //     queue_families.emplace_back(m_present_queue_family);
-    //     sharing_mode = VK_SHARING_MODE_CONCURRENT;
-    // }
+    vk::SwapchainCreateInfoKHR swapchain_ci{
+        .surface = m_surface,
+        .minImageCount = m_swapchain_image_count,
+        .imageFormat = m_swapchain_format.format,
+        .imageColorSpace = m_swapchain_format.colorSpace,
+        .imageExtent = m_swapchain_extent,
+        .imageArrayLayers = 1,
+        .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+        .imageSharingMode = vk::SharingMode::eExclusive,
+        .preTransform = surf_caps.currentTransform,
+        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+        .presentMode = present_mode,
+        .clipped = true,
+    };
+    m_swapchain = m_device.createSwapchainKHR(swapchain_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << *m_swapchain;
+    m_swapchain_images = m_swapchain.getImages();
+    BOOST_LOG_TRIVIAL(trace) << "Created " << m_swapchain_images.size() << " swapchain images";
 
-    // VkSwapchainCreateInfoKHR swapchain_ci;
-    // swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    // swapchain_ci.pNext = nullptr;
-    // swapchain_ci.flags = 0;
-    // swapchain_ci.surface = m_surface;
-    // swapchain_ci.minImageCount = image_count;
-    // swapchain_ci.imageFormat = m_swapchain_format.format;
-    // swapchain_ci.imageColorSpace = m_swapchain_format.colorSpace;
-    // swapchain_ci.imageExtent = m_swapchain_extent;
-    // swapchain_ci.imageArrayLayers = 1;
-    // swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    // swapchain_ci.imageSharingMode = sharing_mode;
-    // swapchain_ci.queueFamilyIndexCount = (uint32_t)queue_families.size();
-    // swapchain_ci.pQueueFamilyIndices = queue_families.data();
-    // swapchain_ci.preTransform = surf_caps.currentTransform;
-    // swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    // swapchain_ci.presentMode = present_mode;
-    // swapchain_ci.clipped = VK_TRUE;
-    // swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
+    m_swapchain_image_views.clear();
+    vk::ImageViewCreateInfo imgv_ci{
+        .viewType = vk::ImageViewType::e2D,
+        .format = m_swapchain_format.format,
+        .components = {
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+        },
+        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 },
+    };
 
-    // VkResult rslt = vkCreateSwapchainKHR(m_device, &swapchain_ci, nullptr, &m_swapchain);
-    // if (rslt == VK_SUCCESS) {
-    //     BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << m_swapchain;
-    // } else {
-    //     BOOST_LOG_TRIVIAL(error) << "Error creating swapchain: " << rslt;
-    //     return false;
-    // }
-
-    // uint32_t num_swapchain_images = 0;
-    // vkGetSwapchainImagesKHR(m_device, m_swapchain, &num_swapchain_images, nullptr);
-    // m_swapchain_images.resize(num_swapchain_images, VK_NULL_HANDLE);
-    // vkGetSwapchainImagesKHR(m_device, m_swapchain, &num_swapchain_images, m_swapchain_images.data());
-
-    // m_swapchain_image_views.resize(num_swapchain_images, VK_NULL_HANDLE);
-    // for (unsigned int i = 0; i < m_swapchain_images.size(); ++i) {
-    //     m_swapchain_image_views[i] = createImageView(m_swapchain_images[i], m_swapchain_format.format, VK_IMAGE_ASPECT_COLOR_BIT);
-    //     if (m_swapchain_image_views[i] == VK_NULL_HANDLE) {
-    //         BOOST_LOG_TRIVIAL(trace) << "Error creating swapchain image view " << i;
-    //     } else {
-    //         BOOST_LOG_TRIVIAL(trace) << "Created swapchain image view " << i << ": " << m_swapchain_image_views[i];
-    //     }
-    // }
-
-    // return true;
+    for (auto &image : m_swapchain_images) {
+        imgv_ci.image = image;
+        m_swapchain_image_views.push_back(m_device.createImageView(imgv_ci));
+    }
+    BOOST_LOG_TRIVIAL(trace) << "Created " << m_swapchain_image_views.size() << " swapchain image views";
 }
 
 /* bool vgraphplay::gfx::System::initRenderPass() {

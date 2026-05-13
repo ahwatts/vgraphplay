@@ -165,7 +165,7 @@ namespace vgraphplay {
 
             // // Pipeline-related structures.
             // VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
-            // VkPipelineLayout m_pipeline_layout;
+            vk::raii::PipelineLayout m_pipeline_layout;
             // VkDescriptorSetLayout m_descriptor_set_layout;
             // VkDescriptorPool m_descriptor_pool;
             // std::vector<VkDescriptorSet> m_descriptor_sets;

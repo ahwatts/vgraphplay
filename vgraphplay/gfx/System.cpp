@@ -89,7 +89,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_swapchain_image_count{0},
       m_swapchain{nullptr},
       m_swapchain_images{},
-      m_swapchain_image_views{}
+      m_swapchain_image_views{},
+      m_pipeline_layout{nullptr}
     //   m_present_queue{VK_NULL_HANDLE},
     //   m_command_pool{VK_NULL_HANDLE},
     //   m_command_buffers{},
@@ -259,7 +260,12 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
 
     for (auto &dev : devices) {
         const vk::PhysicalDeviceProperties props = dev.getProperties();
-        const auto features = dev.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+        const auto features = dev.template getFeatures2<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan11Features,
+            vk::PhysicalDeviceVulkan13Features, 
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+        >();
         const std::vector<vk::ExtensionProperties> all_extensions = dev.enumerateDeviceExtensionProperties();
         const std::vector<vk::QueueFamilyProperties> queue_families = dev.getQueueFamilyProperties();
 
@@ -281,8 +287,15 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
         );
         bool supports_dynamic_rendering = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering;
         bool supports_dynamic_state = features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+        bool supports_draw_parameters = features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters;
 
-        if (supports_vulkan_13 && supports_graphics && supports_all_extensions && supports_dynamic_rendering && supports_dynamic_state) {
+        if (supports_vulkan_13 && 
+            supports_graphics && 
+            supports_all_extensions && 
+            supports_dynamic_rendering && 
+            supports_dynamic_state && 
+            supports_draw_parameters)
+        {
             return dev;
         }
     }
@@ -326,8 +339,14 @@ void vgraphplay::gfx::System::initDevice() {
         .pQueuePriorities = &command_queue_priority,
     };
 
-    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
+    vk::StructureChain<
+        vk::PhysicalDeviceFeatures2, 
+        vk::PhysicalDeviceVulkan11Features,
+        vk::PhysicalDeviceVulkan13Features, 
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+    > feature_chain = {
         {},                             // vk::PhysicalDeviceFeatures2, empty (for now)
+        {.shaderDrawParameters = true}, // Enable shader draw parameters (we need this for SV_VertexID in the shader)
         {.dynamicRendering = true},     // Enable dynamic rendering from Vulkan 1.3
         {.extendedDynamicState = true}, // Enable extended dynamic state from the extension
     };
@@ -461,7 +480,73 @@ void vgraphplay::gfx::System::initSwapchain() {
 }
 
 void vgraphplay::gfx::System::initPipeline() {
-    // vk::raii::
+    vk::ShaderModuleCreateInfo sm_ci = vk::ShaderModuleCreateInfo{
+        // This sizeof() is a very verbose way to say 1...
+        .codeSize = UNLIT_BYTECODE.size() * sizeof(std::remove_reference<decltype(UNLIT_BYTECODE)>::type::value_type),
+        .pCode = reinterpret_cast<const uint32_t *>(UNLIT_BYTECODE.data()),
+    };
+    vk::raii::ShaderModule shader_module = m_device.createShaderModule(sm_ci);
+
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shader_stages{
+        vk::PipelineShaderStageCreateInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = shader_module,
+            .pName = "vs_main",
+        },
+        vk::PipelineShaderStageCreateInfo{
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = shader_module,
+            .pName = "fs_main",
+        },
+    };
+
+    std::array<vk::DynamicState, 2> dynamic_states{
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor,
+    };
+    vk::PipelineDynamicStateCreateInfo dynamic_state_ci = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamic_states);
+
+    vk::PipelineVertexInputStateCreateInfo vertex_input_ci{};
+
+    vk::PipelineInputAssemblyStateCreateInfo input_assembly_ci{
+        .topology = vk::PrimitiveTopology::eTriangleList,
+    };
+
+    vk::PipelineViewportStateCreateInfo viewport_ci{
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+
+    vk::PipelineRasterizationStateCreateInfo raster_ci{
+        .depthClampEnable = vk::False,
+        .rasterizerDiscardEnable = vk::False,
+        .polygonMode = vk::PolygonMode::eFill,
+        .cullMode = vk::CullModeFlagBits::eBack,
+        .frontFace = vk::FrontFace::eClockwise,
+        .depthBiasEnable = vk::False,
+        .lineWidth = 1.0f,
+    };
+
+    vk::PipelineMultisampleStateCreateInfo multisample_state_ci{
+        .rasterizationSamples = vk::SampleCountFlagBits::e1,
+        .sampleShadingEnable = vk::False,
+    };
+
+    vk::PipelineColorBlendAttachmentState blend_attachment{
+        .blendEnable = vk::False,
+        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+    };
+    vk::PipelineColorBlendStateCreateInfo color_blend_ci = vk::PipelineColorBlendStateCreateInfo{
+        .logicOpEnable = vk::False,
+        .logicOp = vk::LogicOp::eCopy,        
+    }.setAttachments(blend_attachment);
+
+    vk::PipelineLayoutCreateInfo layout_ci{
+        .setLayoutCount = 0,
+        .pushConstantRangeCount = 0,
+    };
+    m_pipeline_layout = m_device.createPipelineLayout(layout_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created pipeline layout: " << *m_pipeline_layout;
 }
 
 /* bool vgraphplay::gfx::System::initRenderPass() {

@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-#define LOAD_RESOURCE(RESOURCE) ([]() {                             \
-    extern const std::vector<unsigned char> _resource_##RESOURCE;   \
-    return _resource_##RESOURCE;                                    \
+#define LOAD_RESOURCE(RESOURCE) ([]() -> const std::vector<unsigned char>& { \
+    extern const std::vector<unsigned char> _resource_##RESOURCE;            \
+    return _resource_##RESOURCE;                                             \
 })()
 
 #endif

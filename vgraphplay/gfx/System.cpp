@@ -222,7 +222,7 @@ void vgraphplay::gfx::System::initInstance() {
         .ppEnabledExtensionNames = extension_names.data(),
     };
 
-    m_instance = vk::raii::Instance(m_context, inst_ci);
+    m_instance = m_context.createInstance(inst_ci);
     BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << *m_instance;
 }
 

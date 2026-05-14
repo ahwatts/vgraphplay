@@ -364,7 +364,7 @@ void vgraphplay::gfx::System::initDevice() {
         .setQueueCreateInfos(command_queue_ci)
         .setPEnabledExtensionNames(required_device_extensions);
 
-    m_device = vk::raii::Device(m_physical_device, device_ci);
+    m_device = m_physical_device.createDevice(device_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created device: " << *m_device;
     m_command_queue = vk::raii::Queue(m_device, m_command_queue_family_index, 0);
     BOOST_LOG_TRIVIAL(trace) << "Created command (graphics & presentation) queue: " << *m_command_queue;
@@ -458,7 +458,7 @@ void vgraphplay::gfx::System::initSwapchain() {
     m_swapchain = m_device.createSwapchainKHR(swapchain_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << *m_swapchain;
     m_swapchain_images = m_swapchain.getImages();
-    BOOST_LOG_TRIVIAL(trace) << "Created " << m_swapchain_images.size() << " swapchain images";
+    BOOST_LOG_TRIVIAL(trace) << "Retrieved " << m_swapchain_images.size() << " swapchain images";
 
     m_swapchain_image_views.clear();
     vk::ImageViewCreateInfo imgv_ci{
@@ -476,8 +476,8 @@ void vgraphplay::gfx::System::initSwapchain() {
     for (auto &image : m_swapchain_images) {
         imgv_ci.image = image;
         m_swapchain_image_views.emplace_back(m_device, imgv_ci);
+        BOOST_LOG_TRIVIAL(trace) << "Created swapchain image view: " << *m_swapchain_image_views.back() << " for swapchain image " << image;
     }
-    BOOST_LOG_TRIVIAL(trace) << "Created " << m_swapchain_image_views.size() << " swapchain image views";
 }
 
 void vgraphplay::gfx::System::initPipeline() {
@@ -487,6 +487,7 @@ void vgraphplay::gfx::System::initPipeline() {
         .pCode = reinterpret_cast<const uint32_t *>(UNLIT_BYTECODE.data()),
     };
     vk::raii::ShaderModule shader_module = m_device.createShaderModule(sm_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created shader module: " << *shader_module;
 
     std::array<vk::PipelineShaderStageCreateInfo, 2> shader_stages{
         vk::PipelineShaderStageCreateInfo{

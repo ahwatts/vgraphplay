@@ -164,13 +164,14 @@ namespace vgraphplay {
             // VkImageView m_depth_image_view;
 
             // // Pipeline-related structures.
-            // VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
             vk::raii::PipelineLayout m_pipeline_layout;
+            vk::raii::Pipeline m_pipeline;
+            // VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
             // VkDescriptorSetLayout m_descriptor_set_layout;
             // VkDescriptorPool m_descriptor_pool;
             // std::vector<VkDescriptorSet> m_descriptor_sets;
             // VkRenderPass m_render_pass;
-            // VkPipeline m_pipeline;
+            
             // std::vector<VkFramebuffer> m_swapchain_framebuffers;
 
             // // Semaphores.

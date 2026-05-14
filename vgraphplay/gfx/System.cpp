@@ -90,7 +90,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_swapchain{nullptr},
       m_swapchain_images{},
       m_swapchain_image_views{},
-      m_pipeline_layout{nullptr}
+      m_pipeline_layout{nullptr},
+      m_pipeline{nullptr}
     //   m_present_queue{VK_NULL_HANDLE},
     //   m_command_pool{VK_NULL_HANDLE},
     //   m_command_buffers{},
@@ -499,13 +500,6 @@ void vgraphplay::gfx::System::initPipeline() {
             .pName = "fs_main",
         },
     };
-
-    std::array<vk::DynamicState, 2> dynamic_states{
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor,
-    };
-    vk::PipelineDynamicStateCreateInfo dynamic_state_ci = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamic_states);
-
     vk::PipelineVertexInputStateCreateInfo vertex_input_ci{};
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly_ci{
@@ -541,12 +535,38 @@ void vgraphplay::gfx::System::initPipeline() {
         .logicOp = vk::LogicOp::eCopy,        
     }.setAttachments(blend_attachment);
 
+    std::array<vk::DynamicState, 2> dynamic_states{
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor,
+    };
+    vk::PipelineDynamicStateCreateInfo dynamic_state_ci = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamic_states);
+
     vk::PipelineLayoutCreateInfo layout_ci{
         .setLayoutCount = 0,
         .pushConstantRangeCount = 0,
     };
     m_pipeline_layout = m_device.createPipelineLayout(layout_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created pipeline layout: " << *m_pipeline_layout;
+
+    vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipeline_ci{
+        {
+            .pVertexInputState = &vertex_input_ci,
+            .pInputAssemblyState = &input_assembly_ci,
+            .pViewportState = &viewport_ci,
+            .pRasterizationState = &raster_ci,
+            .pMultisampleState = &multisample_state_ci,
+            .pColorBlendState = &color_blend_ci,
+            .pDynamicState = &dynamic_state_ci,
+            .layout = m_pipeline_layout,
+            .renderPass = nullptr,
+        },
+        {},
+    };
+    pipeline_ci.get<vk::GraphicsPipelineCreateInfo>().setStages(shader_stages);
+    pipeline_ci.get<vk::PipelineRenderingCreateInfo>().setColorAttachmentFormats(m_swapchain_format.format);
+
+    m_pipeline = m_device.createGraphicsPipeline(nullptr, pipeline_ci.get<vk::GraphicsPipelineCreateInfo>());
+    BOOST_LOG_TRIVIAL(trace) << "Created graphics pipeline: " << *m_pipeline;
 }
 
 /* bool vgraphplay::gfx::System::initRenderPass() {

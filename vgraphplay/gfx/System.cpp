@@ -83,6 +83,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_device{nullptr},
       m_command_queue_family_index{~static_cast<uint32_t>(0)},
       m_command_queue{nullptr},
+      m_command_pool{nullptr},
+      m_command_buffer{nullptr},
       m_surface{nullptr},
       m_swapchain_format{},
       m_swapchain_extent{0, 0},
@@ -93,8 +95,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_pipeline_layout{nullptr},
       m_pipeline{nullptr}
     //   m_present_queue{VK_NULL_HANDLE},
-    //   m_command_pool{VK_NULL_HANDLE},
-    //   m_command_buffers{},
     //   m_vertex_buffer{VK_NULL_HANDLE},
     //   m_index_buffer{VK_NULL_HANDLE},
     //   m_uniform_buffers{},
@@ -118,7 +118,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     //   m_descriptor_pool{VK_NULL_HANDLE},
     //   m_descriptor_sets{},
     //   m_render_pass{VK_NULL_HANDLE},
-    //   m_pipeline{VK_NULL_HANDLE},
     //   m_swapchain_framebuffers{},
     //   m_image_available_semaphore{VK_NULL_HANDLE},
     //   m_render_finished_semaphore{VK_NULL_HANDLE}
@@ -129,18 +128,16 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initDevice();
     initSwapchain();
     initPipeline();
+    initCommandPool();
+    initCommandBuffer();
 }
 
 vgraphplay::gfx::System::~System() {}
 
 /* bool vgraphplay::gfx::System::initialize(bool debug) {
-    rv = rv && initShaderModules();
     rv = rv && initRenderPass();
     rv = rv && initDescriptorSetLayout();
-    rv = rv && initPipelineLayout();
-    rv = rv && initPipeline();
     rv = rv && initSemaphores();
-    rv = rv && initCommandPool();
     rv = rv && initDepthResources();
     rv = rv && initSwapchainFramebuffers();
     rv = rv && initTextureImage();
@@ -151,40 +148,9 @@ vgraphplay::gfx::System::~System() {}
     rv = rv && initUniformBuffers();
     rv = rv && initDescriptorPool();
     rv = rv && initDescriptorSets();
-    rv = rv && initCommandBuffers();
     rv = rv && recordCommandBuffers();
 
     return rv;
-}
-
-void vgraphplay::gfx::System::recreateSwapchain() {
-    int width{0}, height{0};
-
-    while (width == 0 && height == 0) {
-        glfwGetFramebufferSize(m_window, &width, &height);
-        glfwWaitEvents();
-    }
-
-    if (m_device != VK_NULL_HANDLE) {
-        vkDeviceWaitIdle(m_device);
-    }
-
-    cleanupCommandBuffers();
-    cleanupSwapchainFramebuffers();
-    cleanupPipeline();
-    cleanupPipelineLayout();
-    cleanupRenderPass();
-    cleanupSwapchain();
-    cleanupDepthResources();
-
-    bool rv = initSwapchain();
-    rv = rv && initRenderPass();
-    rv = rv && initPipelineLayout();
-    rv = rv && initPipeline();
-    rv = rv && initDepthResources();
-    rv = rv && initSwapchainFramebuffers();
-    rv = rv && initCommandBuffers();
-    rv = rv && recordCommandBuffers();
 } */
 
 void vgraphplay::gfx::System::initInstance() {
@@ -480,7 +446,45 @@ void vgraphplay::gfx::System::initSwapchain() {
     }
 }
 
+// void vgraphplay::gfx::System::recreateSwapchain() {
+//     int width{0}, height{0};
+
+//     while (width == 0 && height == 0) {
+//         glfwGetFramebufferSize(m_window, &width, &height);
+//         glfwWaitEvents();
+//     }
+
+//     if (m_device != VK_NULL_HANDLE) {
+//         vkDeviceWaitIdle(m_device);
+//     }
+
+//     cleanupCommandBuffers();
+//     cleanupSwapchainFramebuffers();
+//     cleanupPipeline();
+//     cleanupPipelineLayout();
+//     cleanupRenderPass();
+//     cleanupSwapchain();
+//     cleanupDepthResources();
+
+//     bool rv = initSwapchain();
+//     rv = rv && initRenderPass();
+//     rv = rv && initPipelineLayout();
+//     rv = rv && initPipeline();
+//     rv = rv && initDepthResources();
+//     rv = rv && initSwapchainFramebuffers();
+//     rv = rv && initCommandBuffers();
+//     rv = rv && recordCommandBuffers();
+// }
+
 void vgraphplay::gfx::System::initPipeline() {
+    if (m_pipeline != nullptr) {
+        return;
+    }
+
+    if (m_device == nullptr) {
+        throw std::runtime_error("Unable to create pipeline; device is null");
+    }
+    
     vk::ShaderModuleCreateInfo sm_ci = vk::ShaderModuleCreateInfo{
         // This sizeof() is a very verbose way to say 1...
         .codeSize = UNLIT_BYTECODE.size() * sizeof(std::remove_reference<decltype(UNLIT_BYTECODE)>::type::value_type),
@@ -568,6 +572,43 @@ void vgraphplay::gfx::System::initPipeline() {
 
     m_pipeline = m_device.createGraphicsPipeline(nullptr, pipeline_ci.get<vk::GraphicsPipelineCreateInfo>());
     BOOST_LOG_TRIVIAL(trace) << "Created graphics pipeline: " << *m_pipeline;
+}
+
+void vgraphplay::gfx::System::initCommandPool() {
+    if (m_command_pool != nullptr) {
+        return;
+    }
+
+    if (m_device == nullptr) {
+        throw std::runtime_error{"Unable to create command pool; device is null"};
+    }
+
+    vk::CommandPoolCreateInfo cp_ci{
+        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        .queueFamilyIndex = m_command_queue_family_index,
+    };
+
+    m_command_pool = m_device.createCommandPool(cp_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created command pool: " << *m_command_pool;
+}
+
+void vgraphplay::gfx::System::initCommandBuffer() {
+    if (m_command_buffer != nullptr) {
+        return;
+    }
+
+    if (m_device == nullptr || m_command_pool == nullptr) {
+        throw std::runtime_error{"Unable to create command buffer; device or command pool is null"};
+    }
+
+    vk::CommandBufferAllocateInfo cb_ai{
+        .commandPool = m_command_pool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    };
+
+    m_command_buffer = std::move(vk::raii::CommandBuffers(m_device, cb_ai).front());
+    BOOST_LOG_TRIVIAL(trace) << "Created command buffer: " << *m_command_buffer;
 }
 
 /* bool vgraphplay::gfx::System::initRenderPass() {
@@ -660,93 +701,6 @@ void vgraphplay::gfx::System::cleanupRenderPass() {
     }
 }
 
-bool vgraphplay::gfx::System::initShaderModules() {
-    m_vertex_shader_module = createShaderModule(UNLIT_VERT_BYTECODE);
-    m_fragment_shader_module = createShaderModule(UNLIT_FRAG_BYTECODE);
-
-    if (m_vertex_shader_module == VK_NULL_HANDLE || m_fragment_shader_module == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Unable to create all of the shader modules.";
-        return false;
-    } else {
-        return true;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupShaderModules() {
-    if (m_device != VK_NULL_HANDLE && m_vertex_shader_module != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying vertex shader module: " << m_vertex_shader_module;
-        vkDestroyShaderModule(m_device, m_vertex_shader_module, nullptr);
-        m_vertex_shader_module = VK_NULL_HANDLE;
-    }
-
-    if (m_device != VK_NULL_HANDLE && m_fragment_shader_module != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying fragment shader module: " << m_fragment_shader_module;
-        vkDestroyShaderModule(m_device, m_fragment_shader_module, nullptr);
-        m_fragment_shader_module = VK_NULL_HANDLE;
-    }
-}
-
-VkShaderModule vgraphplay::gfx::System::createShaderModule(const Resource &rsrc) {
-    VkShaderModule rv = VK_NULL_HANDLE;
-
-    if (m_device == VK_NULL_HANDLE) {
-        return rv;
-    }
-
-    VkShaderModuleCreateInfo sm_ci;
-    sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    sm_ci.pNext = nullptr;
-    sm_ci.flags = 0;
-    sm_ci.codeSize = rsrc.size();
-    sm_ci.pCode = reinterpret_cast<const uint32_t*>(rsrc.data());
-
-    VkResult rslt = vkCreateShaderModule(m_device, &sm_ci, nullptr, &rv);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created shader module: " << rv;
-    } else {
-        BOOST_LOG_TRIVIAL(trace) << "Failed to create shader module: " << rslt;
-    }
-
-    return rv;
-}
-
-bool vgraphplay::gfx::System::initPipelineLayout() {
-    if (m_pipeline_layout != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create pipeline layout.";
-        return false;
-    }
-
-    VkPipelineLayoutCreateInfo pl_layout_ci;
-    pl_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pl_layout_ci.pNext = nullptr;
-    pl_layout_ci.flags = 0;
-    pl_layout_ci.setLayoutCount = 1;
-    pl_layout_ci.pSetLayouts = &m_descriptor_set_layout;
-    pl_layout_ci.pushConstantRangeCount = 0;
-    pl_layout_ci.pPushConstantRanges = nullptr;
-
-    VkResult rslt = vkCreatePipelineLayout(m_device, &pl_layout_ci, nullptr, &m_pipeline_layout);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created pipeline layout: " << m_pipeline_layout;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating pipeline layout: " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupPipelineLayout() {
-    if (m_device != VK_NULL_HANDLE && m_pipeline_layout != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying pipeline layout: " << m_pipeline_layout;
-        vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
-        m_pipeline_layout = VK_NULL_HANDLE;
-    }
-}
-
 bool vgraphplay::gfx::System::initDescriptorSetLayout() {
     if (m_descriptor_set_layout != VK_NULL_HANDLE) {
         return true;
@@ -795,183 +749,6 @@ void vgraphplay::gfx::System::cleanupDescriptorSetLayout() {
         BOOST_LOG_TRIVIAL(trace) << "Destroying descriptor set layout: " << m_descriptor_set_layout;
         vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
         m_descriptor_set_layout = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initPipeline() {
-    if (m_pipeline != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE ||
-        m_vertex_shader_module == VK_NULL_HANDLE ||
-        m_fragment_shader_module == VK_NULL_HANDLE ||
-        m_pipeline_layout == VK_NULL_HANDLE ||
-        m_render_pass == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create pipeline.";
-    }
-
-    VkPipelineShaderStageCreateInfo ss_ci[2];
-    ss_ci[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    ss_ci[0].pNext = nullptr;
-    ss_ci[0].flags = 0;
-    ss_ci[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    ss_ci[0].module = m_vertex_shader_module;
-    ss_ci[0].pName = "main";
-    ss_ci[0].pSpecializationInfo = nullptr;
-
-    ss_ci[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    ss_ci[1].pNext = nullptr;
-    ss_ci[1].flags = 0;
-    ss_ci[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    ss_ci[1].module = m_fragment_shader_module;
-    ss_ci[1].pName = "main";
-    ss_ci[1].pSpecializationInfo = nullptr;
-
-    auto bind_desc = Vertex::bindingDescription();
-    auto attr_desc = Vertex::attributeDescription();
-
-    VkPipelineVertexInputStateCreateInfo vert_in_ci;
-    vert_in_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vert_in_ci.pNext = nullptr;
-    vert_in_ci.flags = 0;
-    vert_in_ci.vertexBindingDescriptionCount = 1;
-    vert_in_ci.pVertexBindingDescriptions = &bind_desc;
-    vert_in_ci.vertexAttributeDescriptionCount = 3;
-    vert_in_ci.pVertexAttributeDescriptions = attr_desc.data();
-
-    VkPipelineInputAssemblyStateCreateInfo input_asm_ci;
-    input_asm_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    input_asm_ci.pNext = nullptr;
-    input_asm_ci.flags = 0;
-    input_asm_ci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    input_asm_ci.primitiveRestartEnable = VK_FALSE;
-
-    VkViewport viewport;
-    viewport.x = 0.0;
-    viewport.y = 0.0;
-    viewport.width = static_cast<float>(m_swapchain_extent.width);
-    viewport.height = static_cast<float>(m_swapchain_extent.height);
-    viewport.minDepth = 0.0;
-    viewport.maxDepth = 1.0;
-
-    VkRect2D scissor;
-    scissor.offset = { 0, 0 };
-    scissor.extent = m_swapchain_extent;
-
-    VkPipelineViewportStateCreateInfo vp_ci;
-    vp_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    vp_ci.pNext = nullptr;
-    vp_ci.flags = 0;
-    vp_ci.viewportCount = 1;
-    vp_ci.pViewports = &viewport;
-    vp_ci.scissorCount = 1;
-    vp_ci.pScissors = &scissor;
-
-    VkPipelineRasterizationStateCreateInfo raster_ci;
-    raster_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    raster_ci.pNext = nullptr;
-    raster_ci.flags = 0;
-    raster_ci.depthClampEnable = VK_FALSE;
-    raster_ci.rasterizerDiscardEnable = VK_FALSE;
-    raster_ci.polygonMode = VK_POLYGON_MODE_FILL;
-    raster_ci.cullMode = VK_CULL_MODE_BACK_BIT;
-    raster_ci.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    raster_ci.depthBiasEnable = VK_FALSE;
-    raster_ci.depthBiasConstantFactor = 0.0;
-    raster_ci.depthBiasClamp = 0.0;
-    raster_ci.depthBiasSlopeFactor = 0.0;
-    raster_ci.lineWidth = 1.0;
-
-    VkPipelineMultisampleStateCreateInfo msamp_ci;
-    msamp_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    msamp_ci.pNext = nullptr;
-    msamp_ci.flags = 0;
-    msamp_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    msamp_ci.sampleShadingEnable = VK_FALSE;
-    msamp_ci.minSampleShading = 0.0;
-    msamp_ci.pSampleMask = nullptr;
-    msamp_ci.alphaToCoverageEnable = VK_FALSE;
-    msamp_ci.alphaToOneEnable = VK_FALSE;
-
-    VkPipelineDepthStencilStateCreateInfo depth_ci;
-    depth_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depth_ci.pNext = nullptr;
-    depth_ci.flags = 0;
-    depth_ci.depthTestEnable = VK_TRUE;
-    depth_ci.depthWriteEnable = VK_TRUE;
-    depth_ci.depthCompareOp = VK_COMPARE_OP_LESS;
-    depth_ci.depthBoundsTestEnable = VK_FALSE;
-    depth_ci.stencilTestEnable = VK_FALSE;
-    depth_ci.front = {};
-    depth_ci.back = {};
-    depth_ci.minDepthBounds = 0.0;
-    depth_ci.maxDepthBounds = 1.0;
-
-    VkPipelineColorBlendAttachmentState blender;
-    blender.blendEnable = VK_FALSE;
-    blender.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    blender.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    blender.colorBlendOp = VK_BLEND_OP_ADD;
-    blender.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    blender.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    blender.alphaBlendOp = VK_BLEND_OP_ADD;
-    blender.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-    VkPipelineColorBlendStateCreateInfo blend_ci;
-    blend_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    blend_ci.pNext = nullptr;
-    blend_ci.flags = 0;
-    blend_ci.logicOpEnable = VK_FALSE;
-    blend_ci.logicOp = VK_LOGIC_OP_COPY;
-    blend_ci.attachmentCount = 1;
-    blend_ci.pAttachments = &blender;
-    blend_ci.blendConstants[0] = 0.0;
-    blend_ci.blendConstants[1] = 0.0;
-    blend_ci.blendConstants[2] = 0.0;
-    blend_ci.blendConstants[3] = 0.0;
-
-    // VkPipelineDynamicStateCreateInfo dyn_state_ci;
-    // dyn_state_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    // dyn_state_ci.pNext = nullptr;
-    // dyn_state_ci.flags = 0;
-
-    VkGraphicsPipelineCreateInfo pipeline_ci;
-    pipeline_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipeline_ci.pNext = nullptr;
-    pipeline_ci.flags = 0;
-    pipeline_ci.stageCount = 2;
-    pipeline_ci.pStages = ss_ci;
-    pipeline_ci.pVertexInputState = &vert_in_ci;
-    pipeline_ci.pInputAssemblyState = &input_asm_ci;
-    pipeline_ci.pTessellationState = nullptr;
-    pipeline_ci.pViewportState = &vp_ci;
-    pipeline_ci.pRasterizationState = &raster_ci;
-    pipeline_ci.pMultisampleState = &msamp_ci;
-    pipeline_ci.pDepthStencilState = &depth_ci;
-    pipeline_ci.pColorBlendState = &blend_ci;
-    pipeline_ci.pDynamicState = nullptr;
-    pipeline_ci.layout = m_pipeline_layout;
-    pipeline_ci.renderPass = m_render_pass;
-    pipeline_ci.subpass = 0;
-    pipeline_ci.basePipelineHandle = VK_NULL_HANDLE;
-    pipeline_ci.basePipelineIndex = -1;
-
-    VkResult rslt = vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &m_pipeline);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created graphics pipeline: " << m_pipeline;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating graphics pipeline: " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupPipeline() {
-    if (m_device != VK_NULL_HANDLE && m_pipeline != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying pipeline: " << m_pipeline;
-        vkDestroyPipeline(m_device, m_pipeline, nullptr);
-        m_pipeline = VK_NULL_HANDLE;
     }
 }
 
@@ -1077,40 +854,6 @@ void vgraphplay::gfx::System::cleanupSemaphores() {
         BOOST_LOG_TRIVIAL(trace) << "Destroying render finished semaphore: " << m_render_finished_semaphore;
         vkDestroySemaphore(m_device, m_render_finished_semaphore, nullptr);
         m_render_finished_semaphore = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initCommandPool() {
-    if (m_command_pool != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create command pool.";
-        return false;
-    }
-
-    VkCommandPoolCreateInfo cp_ci;
-    cp_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cp_ci.pNext = nullptr;
-    cp_ci.flags = 0;
-    cp_ci.queueFamilyIndex = m_graphics_queue_family;
-
-    VkResult rslt = vkCreateCommandPool(m_device, &cp_ci, nullptr, &m_command_pool);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created command pool: " << m_command_pool;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating command pool " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupCommandPool() {
-    if (m_device != VK_NULL_HANDLE && m_command_pool != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying command pool: " << m_command_pool;
-        vkDestroyCommandPool(m_device, m_command_pool, nullptr);
-        m_command_pool = VK_NULL_HANDLE;
     }
 }
 
@@ -1705,46 +1448,6 @@ bool vgraphplay::gfx::System::initDescriptorSets() {
 }
 
 void vgraphplay::gfx::System::cleanupDescriptorSets() {
-}
-
-bool vgraphplay::gfx::System::initCommandBuffers() {
-    if (m_command_buffers.size() > 0) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE || m_command_pool == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create command buffers.";
-        return false;
-    }
-
-    size_t num_buffers = m_swapchain_framebuffers.size();
-    m_command_buffers.resize(num_buffers);
-
-    VkCommandBufferAllocateInfo cb_ai;
-    cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cb_ai.pNext = nullptr;
-    cb_ai.commandPool = m_command_pool;
-    cb_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cb_ai.commandBufferCount = static_cast<uint32_t>(num_buffers);
-
-    VkResult rslt = vkAllocateCommandBuffers(m_device, &cb_ai, m_command_buffers.data());
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Allocated " << m_command_buffers.size() << " command buffers";
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating command buffers " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupCommandBuffers() {
-    if (m_command_buffers.size() > 0 &&
-        m_device != VK_NULL_HANDLE &&
-        m_command_pool != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Freeing " << m_command_buffers.size() << " command buffers";
-        vkFreeCommandBuffers(m_device, m_command_pool, m_command_buffers.size(), m_command_buffers.data());
-        m_command_buffers.clear();
-    }
 }
 
 bool vgraphplay::gfx::System::recordCommandBuffers() {

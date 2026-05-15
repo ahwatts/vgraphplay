@@ -52,8 +52,10 @@ namespace vgraphplay {
             void initDevice();
             void initSurface();
             void initSwapchain();
-            void initPipeline();
             // void recreateSwapchain();
+            void initPipeline();
+            void initCommandPool();
+            void initCommandBuffer();
 
             /* bool initRenderPass();
             void cleanupRenderPass();
@@ -61,9 +63,6 @@ namespace vgraphplay {
             bool initShaderModules();
             void cleanupShaderModules();
             VkShaderModule createShaderModule(const Resource &rsrc);
-
-            bool initPipelineLayout();
-            void cleanupPipelineLayout();
 
             bool initDescriptorSetLayout();
             void cleanupDescriptorSetLayout();
@@ -76,9 +75,6 @@ namespace vgraphplay {
 
             bool initSemaphores();
             void cleanupSemaphores();
-
-            bool initCommandPool();
-            void cleanupCommandPool();
 
             bool initTextureImage();
             bool initTextureImageView();
@@ -101,17 +97,9 @@ namespace vgraphplay {
             bool initDescriptorSets();
             void cleanupDescriptorSets();
 
-            bool initCommandBuffers();
-            void cleanupCommandBuffers();
-            bool recordCommandBuffers();
-
             bool initDepthResources();
             void cleanupDepthResources();
             VkFormat chooseDepthFormat();
-
-            uint32_t chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags mem_props);
-            VkFormat chooseFormat(const VkFormat *candidates, int num_candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-            bool hasStencilComponent(VkFormat format);
 
             bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
             bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
@@ -137,8 +125,8 @@ namespace vgraphplay {
             // Command queues / buffers / pool.
             uint32_t m_command_queue_family_index;
             vk::raii::Queue m_command_queue;
-            // VkCommandPool m_command_pool;
-            // std::vector<VkCommandBuffer> m_command_buffers;
+            vk::raii::CommandPool m_command_pool;
+            vk::raii::CommandBuffer m_command_buffer;
 
             // // Draw data.
             // VkBuffer m_vertex_buffer, m_index_buffer;

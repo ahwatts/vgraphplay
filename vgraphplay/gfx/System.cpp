@@ -19,15 +19,26 @@
 #include "System.h"
 #include "../VulkanOutput.h"
 
+bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name);
+bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_name);
+std::vector<const char *> buildInstanceExtensionList(vk::raii::Context &context, bool debug);
+std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, bool debug);
+
 vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
 vk::SurfaceFormatKHR chooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR> &available_formats);
 vk::PresentModeKHR chooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR> &available_modes);
 vk::Extent2D chooseSwapchainExtent(GLFWwindow *window, const vk::SurfaceCapabilitiesKHR &caps);
 
-bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name);
-bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_name);
-std::vector<const char *> buildInstanceExtensionList(vk::raii::Context &context, bool debug);
-std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, bool debug);
+void transitionImageLayout(
+    const vk::raii::CommandBuffer &commands,
+    const vk::Image &image,
+    vk::ImageLayout old_layout,
+    vk::ImageLayout new_layout,
+    vk::AccessFlags2 src_access_mask,
+    vk::AccessFlags2 dst_access_mask,
+    vk::PipelineStageFlags2 src_stage_mask,
+    vk::PipelineStageFlags2 dst_stage_mask
+);
 
 const std::vector<unsigned char> &UNLIT_BYTECODE = LOAD_RESOURCE(unlit_slang_spv);
 const std::vector<unsigned char> &WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
@@ -93,7 +104,10 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_swapchain_images{},
       m_swapchain_image_views{},
       m_pipeline_layout{nullptr},
-      m_pipeline{nullptr}
+      m_pipeline{nullptr},
+      m_present_complete_semaphore{nullptr},
+      m_render_finished_semaphores{},
+      m_draw_fence{nullptr}
     //   m_present_queue{VK_NULL_HANDLE},
     //   m_vertex_buffer{VK_NULL_HANDLE},
     //   m_index_buffer{VK_NULL_HANDLE},
@@ -105,22 +119,13 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     //   m_texture_image_memory{VK_NULL_HANDLE},
     //   m_texture_image_view{VK_NULL_HANDLE},
     //   m_texture_sampler{VK_NULL_HANDLE},
-    //   m_swapchain_images{},
-    //   m_swapchain_image_views{},
     //   m_framebuffer_resized{false},
     //   m_depth_image{VK_NULL_HANDLE},
     //   m_depth_image_memory{VK_NULL_HANDLE},
     //   m_depth_image_view{VK_NULL_HANDLE},
-    //   m_vertex_shader_module{VK_NULL_HANDLE},
-    //   m_fragment_shader_module{VK_NULL_HANDLE},
-    //   m_pipeline_layout{VK_NULL_HANDLE},
     //   m_descriptor_set_layout{VK_NULL_HANDLE},
     //   m_descriptor_pool{VK_NULL_HANDLE},
     //   m_descriptor_sets{},
-    //   m_render_pass{VK_NULL_HANDLE},
-    //   m_swapchain_framebuffers{},
-    //   m_image_available_semaphore{VK_NULL_HANDLE},
-    //   m_render_finished_semaphore{VK_NULL_HANDLE}
 {
     initInstance();
     initDebugMessenger();
@@ -130,9 +135,15 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initPipeline();
     initCommandPool();
     initCommandBuffer();
+    initSynchronizationObjects();
 }
 
-vgraphplay::gfx::System::~System() {}
+vgraphplay::gfx::System::~System() {
+    // Wait until things are finished before destructing the chirren.
+    if (m_command_queue != nullptr) {
+        m_command_queue.waitIdle();
+    }
+}
 
 /* bool vgraphplay::gfx::System::initialize(bool debug) {
     rv = rv && initRenderPass();
@@ -314,7 +325,10 @@ void vgraphplay::gfx::System::initDevice() {
     > feature_chain = {
         {},                             // vk::PhysicalDeviceFeatures2, empty (for now)
         {.shaderDrawParameters = true}, // Enable shader draw parameters (we need this for SV_VertexID in the shader)
-        {.dynamicRendering = true},     // Enable dynamic rendering from Vulkan 1.3
+        {
+            .synchronization2 = true,   // Support new synchronization commands
+            .dynamicRendering = true,   // Enable dynamic rendering from Vulkan 1.3
+        },     
         {.extendedDynamicState = true}, // Enable extended dynamic state from the extension
     };
 
@@ -611,97 +625,147 @@ void vgraphplay::gfx::System::initCommandBuffer() {
     BOOST_LOG_TRIVIAL(trace) << "Created command buffer: " << *m_command_buffer;
 }
 
-/* bool vgraphplay::gfx::System::initRenderPass() {
-    if (m_render_pass != VK_NULL_HANDLE) {
-        return true;
+void transitionImageLayout(
+    const vk::raii::CommandBuffer &commands,
+    const vk::Image &image,
+    vk::ImageLayout old_layout,
+    vk::ImageLayout new_layout,
+    vk::AccessFlags2 src_access_mask,
+    vk::AccessFlags2 dst_access_mask,
+    vk::PipelineStageFlags2 src_stage_mask,
+    vk::PipelineStageFlags2 dst_stage_mask
+) {
+    vk::ImageMemoryBarrier2 barrier{
+        .srcStageMask = src_stage_mask,
+        .srcAccessMask = src_access_mask,
+        .dstStageMask = dst_stage_mask,
+        .dstAccessMask = dst_access_mask,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+        .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+        .image = image,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    vk::DependencyInfo dep = vk::DependencyInfo{
+        .dependencyFlags = {},
+    }.setImageMemoryBarriers(barrier);
+
+    commands.pipelineBarrier2(dep);
+}
+
+void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) {
+    m_command_buffer.begin({});
+    
+    // Transition the image to the color attachment layout.
+    transitionImageLayout(
+        m_command_buffer, 
+        m_swapchain_images[image_index],
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        {},
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput
+    );
+
+    // Start the rendering to the color attachment.
+    vk::ClearValue clear_color = vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
+    vk::RenderingAttachmentInfo rai{
+        .imageView = m_swapchain_image_views[image_index],
+        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = clear_color,
+    };
+    vk::RenderingInfo ri = vk::RenderingInfo{
+        .renderArea = {.offset = {0, 0}, .extent = m_swapchain_extent},
+        .layerCount = 1,
+    }.setColorAttachments(rai);
+    m_command_buffer.beginRendering(ri);
+
+    // Render.
+    m_command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
+    m_command_buffer.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(m_swapchain_extent.width), static_cast<float>(m_swapchain_extent.height)});
+    m_command_buffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, m_swapchain_extent});
+    m_command_buffer.draw(3, 1, 0, 0);
+
+    // Done rendering.
+    m_command_buffer.endRendering();
+
+    // Transition the image to be presentable.
+    transitionImageLayout(
+        m_command_buffer,
+        m_swapchain_images[image_index],
+        vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::ePresentSrcKHR,
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        {},
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits2::eBottomOfPipe
+    );
+
+    m_command_buffer.end();
+}
+
+void vgraphplay::gfx::System::initSynchronizationObjects() {
+    if (m_device == nullptr) {
+        throw std::runtime_error{"Unable to create synchronization objects; device is null"};
     }
 
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create render pass.";
-        return false;
+    for (int i = 0; i < m_swapchain_image_count; ++i) {
+        m_render_finished_semaphores.push_back(m_device.createSemaphore({}));
+        BOOST_LOG_TRIVIAL(trace) << "Created semaphore (render finished) for image " << i << ": " << *m_render_finished_semaphores.back();
     }
 
-    std::array<VkAttachmentDescription, 2> attachments{};
+    m_present_complete_semaphore = m_device.createSemaphore({});
+    BOOST_LOG_TRIVIAL(trace) << "Created semaphore (present complete): " << *m_present_complete_semaphore;
+    m_draw_fence = m_device.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
+    BOOST_LOG_TRIVIAL(trace) << "Created fence (draw): " << *m_draw_fence;
+}
 
-    attachments[0].flags = 0;
-    attachments[0].format = m_swapchain_format.format;
-    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+void vgraphplay::gfx::System::drawFrame() {
+    vk::Result result = m_device.waitForFences(*m_draw_fence, vk::True, UINT64_MAX);
+    if (result != vk::Result::eSuccess) {
+        throw std::runtime_error{"Error waiting for draw fence"};
+    }
+    m_device.resetFences(*m_draw_fence);
 
-    attachments[1].flags = 0;
-    attachments[1].format = chooseDepthFormat();
-    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    auto [result2, image_index] = m_swapchain.acquireNextImage(UINT64_MAX, *m_present_complete_semaphore, nullptr);
+    if (result2 != vk::Result::eSuccess) {
+        throw std::runtime_error{"Error acquiring next swapchain image"};
+    }
 
-    VkAttachmentReference color_ref;
-    color_ref.attachment = 0;
-    color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    vk::raii::Semaphore &render_finished_semaphore = m_render_finished_semaphores[image_index];
+    recordRenderInCommandBuffer(image_index);
 
-    VkAttachmentReference depth_ref;
-    depth_ref.attachment = 1;
-    depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    vk::PipelineStageFlags wait_dst_stage_mask{vk::PipelineStageFlagBits::eColorAttachmentOutput};
+    vk::SubmitInfo submit_info = vk::SubmitInfo{.pWaitDstStageMask = &wait_dst_stage_mask}
+        .setWaitSemaphores(*m_present_complete_semaphore)
+        .setCommandBuffers(*m_command_buffer)
+        .setSignalSemaphores(*render_finished_semaphore);
 
-    VkSubpassDescription subpass;
-    subpass.flags = 0;
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.inputAttachmentCount = 0;
-    subpass.pInputAttachments = nullptr;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &color_ref;
-    subpass.pResolveAttachments = nullptr;
-    subpass.pDepthStencilAttachment = &depth_ref;
-    subpass.preserveAttachmentCount = 0;
-    subpass.pPreserveAttachments = nullptr;
+    m_command_queue.submit(submit_info, *m_draw_fence);
 
-    VkSubpassDependency sd;
-    sd.dependencyFlags = 0;
-    sd.srcSubpass = VK_SUBPASS_EXTERNAL;
-    sd.dstSubpass = 0;
-    sd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    sd.srcAccessMask = 0;
-    sd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    sd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    vk::PresentInfoKHR present_info = vk::PresentInfoKHR{}
+        .setWaitSemaphores(*render_finished_semaphore)
+        .setSwapchains(*m_swapchain)
+        .setImageIndices(image_index);
 
-    VkRenderPassCreateInfo rp_ci;
-    rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rp_ci.pNext = nullptr;
-    rp_ci.flags = 0;
-    rp_ci.attachmentCount = static_cast<uint32_t>(attachments.size());
-    rp_ci.pAttachments = attachments.data();
-    rp_ci.subpassCount = 1;
-    rp_ci.pSubpasses = &subpass;
-    rp_ci.dependencyCount = 1;
-    rp_ci.pDependencies = &sd;
-
-    VkResult rslt = vkCreateRenderPass(m_device, &rp_ci, nullptr, &m_render_pass);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created render pass: " << m_render_pass;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating render pass: " << rslt;
-        return false;
+    result = m_command_queue.presentKHR(present_info);
+    if (result != vk::Result::eSuccess) {
+        throw std::runtime_error{"Error presenting new image"};
     }
 }
 
-void vgraphplay::gfx::System::cleanupRenderPass() {
-    if (m_device != VK_NULL_HANDLE && m_render_pass != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying render pass: " << m_render_pass;
-        vkDestroyRenderPass(m_device, m_render_pass, nullptr);
-        m_render_pass = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initDescriptorSetLayout() {
+/* bool vgraphplay::gfx::System::initDescriptorSetLayout() {
     if (m_descriptor_set_layout != VK_NULL_HANDLE) {
         return true;
     }
@@ -749,58 +813,6 @@ void vgraphplay::gfx::System::cleanupDescriptorSetLayout() {
         BOOST_LOG_TRIVIAL(trace) << "Destroying descriptor set layout: " << m_descriptor_set_layout;
         vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
         m_descriptor_set_layout = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initSwapchainFramebuffers() {
-    if (m_swapchain_framebuffers.size() > 0) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE || m_render_pass == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create framebuffer.";
-        return false;
-    }
-
-    m_swapchain_framebuffers.resize(m_swapchain_image_views.size());
-    for (unsigned int i = 0; i < m_swapchain_image_views.size(); ++i) {
-        std::array<VkImageView, 2> attachments{
-            m_swapchain_image_views[i],
-            m_depth_image_view,
-        };
-
-        VkFramebufferCreateInfo fb_ci;
-        fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fb_ci.pNext = nullptr;
-        fb_ci.flags = 0;
-        fb_ci.renderPass = m_render_pass;
-        fb_ci.attachmentCount = attachments.size();
-        fb_ci.pAttachments = attachments.data();
-        fb_ci.width = m_swapchain_extent.width;
-        fb_ci.height = m_swapchain_extent.height;
-        fb_ci.layers = 1;
-
-        VkResult rslt = vkCreateFramebuffer(m_device, &fb_ci, nullptr, &m_swapchain_framebuffers[i]);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Created swapchain framebuffer " << i << ": " << m_swapchain_framebuffers[i];
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Error creating swapchain framebuffer " << i << ": " << rslt;
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupSwapchainFramebuffers() {
-    if (m_device != VK_NULL_HANDLE && m_swapchain_framebuffers.size() > 0) {
-        for (unsigned int i = 0; i < m_swapchain_framebuffers.size(); ++i) {
-            if (m_swapchain_framebuffers[i] != VK_NULL_HANDLE) {
-                BOOST_LOG_TRIVIAL(trace) << "Destroying swapchain framebuffer " << i << ": " << m_swapchain_framebuffers[i];
-                vkDestroyFramebuffer(m_device, m_swapchain_framebuffers[i], nullptr);
-            }
-        }
-        m_swapchain_framebuffers.clear();
     }
 }
 
@@ -1450,59 +1462,6 @@ bool vgraphplay::gfx::System::initDescriptorSets() {
 void vgraphplay::gfx::System::cleanupDescriptorSets() {
 }
 
-bool vgraphplay::gfx::System::recordCommandBuffers() {
-    for (unsigned int i = 0; i < m_command_buffers.size(); ++i) {
-        VkCommandBufferBeginInfo cb_bi;
-        cb_bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cb_bi.pNext = nullptr;
-        cb_bi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-        cb_bi.pInheritanceInfo = nullptr;
-
-        VkResult rslt = vkBeginCommandBuffer(m_command_buffers[i], &cb_bi);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Beginning recording to command buffer " << m_command_buffers[i];
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Error beginning command buffer recording: " << rslt;
-            return false;
-        }
-
-        VkRenderPassBeginInfo rp_bi;
-        rp_bi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rp_bi.pNext = nullptr;
-        rp_bi.renderPass = m_render_pass;
-        rp_bi.framebuffer = m_swapchain_framebuffers[i];
-        rp_bi.renderArea.offset = { 0, 0 };
-        rp_bi.renderArea.extent = m_swapchain_extent;
-
-        std::array<VkClearValue, 2> clear_values{};
-        clear_values[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-        clear_values[1].depthStencil = { 1.0f, 0 };
-        rp_bi.clearValueCount = clear_values.size();
-        rp_bi.pClearValues = clear_values.data();
-
-        VkBuffer vertex_buffers[] = {m_vertex_buffer};
-        VkDeviceSize offsets[] = {0};
-
-        vkCmdBeginRenderPass(m_command_buffers[i], &rp_bi, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(m_command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-        vkCmdBindVertexBuffers(m_command_buffers[i], 0, 1, vertex_buffers, offsets);
-        vkCmdBindIndexBuffer(m_command_buffers[i], m_index_buffer, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdBindDescriptorSets(m_command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1, &m_descriptor_sets[i], 0, nullptr);
-        vkCmdDrawIndexed(m_command_buffers[i], NUM_RECTANGLE_INDICES, 1, 0, 0, 0);
-        vkCmdEndRenderPass(m_command_buffers[i]);
-
-        rslt = vkEndCommandBuffer(m_command_buffers[i]);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Finished recording to command buffer " << m_command_buffers[i];
-        } else {
-            BOOST_LOG_TRIVIAL(trace) << "Error finishing command buffer recording: " << rslt;
-            return false;
-        }
-    }
-
-    return true;
-}
-
 uint32_t vgraphplay::gfx::System::chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties mem_props;
     vkGetPhysicalDeviceMemoryProperties(m_physical_device, &mem_props);
@@ -1837,63 +1796,9 @@ bool vgraphplay::gfx::System::endOneTimeCommands(VkCommandBuffer commands) {
     return true;
 } */
 
-void vgraphplay::gfx::System::drawFrame() {
-    /* uint32_t image_index;
-
-    if (m_framebuffer_resized) {
-        recreateSwapchain();
-        m_framebuffer_resized = false;
-    }
-
-    VkResult rslt = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<uint64_t>::max(),
-                                          m_image_available_semaphore, VK_NULL_HANDLE, &image_index);
-
-    if (rslt == VK_ERROR_OUT_OF_DATE_KHR || rslt == VK_SUBOPTIMAL_KHR) {
-        recreateSwapchain();
-        return;
-    } else if (rslt != VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(error) << "Error acquiring next swapchain image: " << rslt;
-        return;
-    }
-
-    updateUniformBuffer(image_index);
-
-    VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    VkSubmitInfo si;
-    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    si.pNext = nullptr;
-    si.waitSemaphoreCount = 1;
-    si.pWaitSemaphores = &m_image_available_semaphore;
-    si.pWaitDstStageMask = wait_stages;
-    si.commandBufferCount = 1;
-    si.pCommandBuffers = &m_command_buffers[image_index];
-    si.signalSemaphoreCount = 1;
-    si.pSignalSemaphores = &m_render_finished_semaphore;
-
-    rslt = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
-    if (rslt != VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(error) << "Error submitting draw command buffer: " << rslt;
-    }
-
-    VkPresentInfoKHR pi;
-    pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    pi.pNext = nullptr;
-    pi.waitSemaphoreCount = 1;
-    pi.pWaitSemaphores = &m_render_finished_semaphore;
-    pi.swapchainCount = 1;
-    pi.pSwapchains = &m_swapchain;
-    pi.pImageIndices = &image_index;
-    pi.pResults = nullptr;
-
-    rslt = vkQueuePresentKHR(m_present_queue, &pi);
-    if (rslt != VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(error) << "Error submitting swapchain update: " << rslt;
-    } */
-}
-
-void vgraphplay::gfx::System::setFramebufferResized() {
-    // m_framebuffer_resized = true;
-}
+// void vgraphplay::gfx::System::setFramebufferResized() {
+//     m_framebuffer_resized = true;
+// }
 
 /* VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
     VkVertexInputBindingDescription desc;

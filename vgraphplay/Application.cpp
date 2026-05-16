@@ -51,7 +51,7 @@ void vgraphplay::Application::resizeCallback(GLFWwindow *window, int width, int 
 void vgraphplay::Application::handleResize(int width, int height) {
     m_window_width = width;
     m_window_height = height;
-    m_gfx.setFramebufferResized();
+    // m_gfx.setFramebufferResized();
 }
 
 void vgraphplay::Application::run() {

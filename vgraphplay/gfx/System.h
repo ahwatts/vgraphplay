@@ -43,7 +43,7 @@ namespace vgraphplay {
             ~System();
 
             void drawFrame();
-            void setFramebufferResized();
+            // void setFramebufferResized();
 
         private:
             void initInstance();
@@ -56,25 +56,12 @@ namespace vgraphplay {
             void initPipeline();
             void initCommandPool();
             void initCommandBuffer();
+            void initSynchronizationObjects();
 
-            /* bool initRenderPass();
-            void cleanupRenderPass();
+            void recordRenderInCommandBuffer(uint32_t image_index);
 
-            bool initShaderModules();
-            void cleanupShaderModules();
-            VkShaderModule createShaderModule(const Resource &rsrc);
-
-            bool initDescriptorSetLayout();
+            /* bool initDescriptorSetLayout();
             void cleanupDescriptorSetLayout();
-
-            bool initPipeline();
-            void cleanupPipeline();
-
-            bool initSwapchainFramebuffers();
-            void cleanupSwapchainFramebuffers();
-
-            bool initSemaphores();
-            void cleanupSemaphores();
 
             bool initTextureImage();
             bool initTextureImageView();
@@ -107,7 +94,6 @@ namespace vgraphplay {
 
             bool copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
             bool copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height);
-            bool transitionImageLayout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
 
             VkCommandBuffer beginOneTimeCommands();
             bool endOneTimeCommands(VkCommandBuffer commands); */
@@ -158,13 +144,11 @@ namespace vgraphplay {
             // VkDescriptorSetLayout m_descriptor_set_layout;
             // VkDescriptorPool m_descriptor_pool;
             // std::vector<VkDescriptorSet> m_descriptor_sets;
-            // VkRenderPass m_render_pass;
             
-            // std::vector<VkFramebuffer> m_swapchain_framebuffers;
-
-            // // Semaphores.
-            // VkSemaphore m_image_available_semaphore;
-            // VkSemaphore m_render_finished_semaphore;
+            // Synchronization objects.
+            vk::raii::Semaphore m_present_complete_semaphore;
+            std::vector<vk::raii::Semaphore> m_render_finished_semaphores;
+            vk::raii::Fence m_draw_fence;
         };
     }
 }

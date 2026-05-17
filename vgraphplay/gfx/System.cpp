@@ -19,7 +19,6 @@
 #include "../vulkan.h"
 
 #include "System.h"
-#include "../VulkanOutput.h"
 
 bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name);
 bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_name);

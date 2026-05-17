@@ -25,16 +25,10 @@ namespace vgraphplay {
             static std::array<vk::VertexInputAttributeDescription, 2> attributeDescription();
         };
 
-        struct Transormations {
-            glm::mat4x4 model;
-            glm::mat4x4 view;
-            glm::mat4x4 projection;
-        };
-
-        // struct ChosenDeviceInfo {
-        //     vk::raii::PhysicalDevice dev;
-        //     uint32_t graphics_queue_family;
-        //     uint32_t present_queue_family;
+        // struct Transormations {
+        //     glm::mat4x4 model;
+        //     glm::mat4x4 view;
+        //     glm::mat4x4 projection;
         // };
 
         class System {
@@ -140,10 +134,9 @@ namespace vgraphplay {
             // VkDeviceMemory m_depth_image_memory;
             // VkImageView m_depth_image_view;
 
-            // // Pipeline-related structures.
+            // Pipeline-related structures.
             vk::raii::PipelineLayout m_pipeline_layout;
             vk::raii::Pipeline m_pipeline;
-            // VkShaderModule m_vertex_shader_module, m_fragment_shader_module;
             // VkDescriptorSetLayout m_descriptor_set_layout;
             // VkDescriptorPool m_descriptor_pool;
             // std::vector<VkDescriptorSet> m_descriptor_sets;

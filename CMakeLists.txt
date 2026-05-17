@@ -109,8 +109,6 @@ add_executable(vgraphplay
   vgraphplay/Application.cpp
   vgraphplay/gfx/System.h
   vgraphplay/gfx/System.cpp
-  vgraphplay/VulkanOutput.h
-  vgraphplay/VulkanOutput.cpp
   vgraphplay/vgraphplay.cpp
   ${EMBEDDED_SHADERS}
   ${EMBEDDED_TEXTURES})

@@ -7,9 +7,6 @@
 
 #include "vulkan.h"
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #include "Application.h"
 
 using namespace vgraphplay;

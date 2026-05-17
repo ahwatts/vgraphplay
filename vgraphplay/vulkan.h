@@ -21,9 +21,9 @@
 import vulkan_hpp;
 #endif
 
-// GLFW has to be included *after* Vulkan. The C++ bindings aren't quite the
-// same as the regular ones, but still It seems like this works even if we don't
-// have GLFW_INCLUDE_VULKAN defined.
+// GLFW has to be included *after* Vulkan. The Vulkan RAII include and the C++20
+// module will both ultimately include the main vulkan.h header, so this
+// include will work.
 #include <GLFW/glfw3.h>
 
 #endif

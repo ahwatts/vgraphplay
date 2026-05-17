@@ -110,7 +110,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_present_complete_semaphores{},
       m_render_finished_semaphores{},
       m_draw_fences{}
-    //   m_present_queue{VK_NULL_HANDLE},
     //   m_vertex_buffer{VK_NULL_HANDLE},
     //   m_index_buffer{VK_NULL_HANDLE},
     //   m_uniform_buffers{},
@@ -121,7 +120,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     //   m_texture_image_memory{VK_NULL_HANDLE},
     //   m_texture_image_view{VK_NULL_HANDLE},
     //   m_texture_sampler{VK_NULL_HANDLE},
-    //   m_framebuffer_resized{false},
     //   m_depth_image{VK_NULL_HANDLE},
     //   m_depth_image_memory{VK_NULL_HANDLE},
     //   m_depth_image_view{VK_NULL_HANDLE},
@@ -147,32 +145,10 @@ vgraphplay::gfx::System::~System() {
     }
 }
 
-/* bool vgraphplay::gfx::System::initialize(bool debug) {
-    rv = rv && initRenderPass();
-    rv = rv && initDescriptorSetLayout();
-    rv = rv && initSemaphores();
-    rv = rv && initDepthResources();
-    rv = rv && initSwapchainFramebuffers();
-    rv = rv && initTextureImage();
-    rv = rv && initTextureImageView();
-    rv = rv && initTextureSampler();
-    rv = rv && initVertexBuffer();
-    rv = rv && initIndexBuffer();
-    rv = rv && initUniformBuffers();
-    rv = rv && initDescriptorPool();
-    rv = rv && initDescriptorSets();
-    rv = rv && recordCommandBuffers();
-
-    return rv;
-} */
-
 void vgraphplay::gfx::System::initInstance() {
     if (m_instance != nullptr) {
         return;
     }
-
-    // logInstanceExtensions(m_context);
-    // logInstanceLayers(m_context);
 
     vk::InstanceCreateFlags flags;
     std::vector<const char *> extension_names = buildInstanceExtensionList(m_context, m_debug);
@@ -828,59 +804,6 @@ void vgraphplay::gfx::System::cleanupDescriptorSetLayout() {
         BOOST_LOG_TRIVIAL(trace) << "Destroying descriptor set layout: " << m_descriptor_set_layout;
         vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
         m_descriptor_set_layout = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initSemaphores() {
-    if (m_image_available_semaphore != VK_NULL_HANDLE &&
-        m_render_finished_semaphore != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create semaphores.";
-        return false;
-    }
-
-    VkSemaphoreCreateInfo sem_ci;
-    sem_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    sem_ci.pNext = nullptr;
-    sem_ci.flags = 0;
-
-    if (m_image_available_semaphore == VK_NULL_HANDLE) {
-        VkResult rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_image_available_semaphore);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Created image available semaphore: " << m_image_available_semaphore;
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Error creating image available semaphore: " << rslt;
-            return false;
-        }
-    }
-
-    if (m_render_finished_semaphore == VK_NULL_HANDLE) {
-        VkResult rslt = vkCreateSemaphore(m_device, &sem_ci, nullptr, &m_render_finished_semaphore);
-        if (rslt == VK_SUCCESS) {
-            BOOST_LOG_TRIVIAL(trace) << "Created render finished semaphore: " << m_render_finished_semaphore;
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Error creating render finished semaphore: " << rslt;
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupSemaphores() {
-    if (m_device != VK_NULL_HANDLE && m_image_available_semaphore != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying image available semaphore: " << m_image_available_semaphore;
-        vkDestroySemaphore(m_device, m_image_available_semaphore, nullptr);
-        m_image_available_semaphore = VK_NULL_HANDLE;
-    }
-
-    if (m_device != VK_NULL_HANDLE && m_render_finished_semaphore != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying render finished semaphore: " << m_render_finished_semaphore;
-        vkDestroySemaphore(m_device, m_render_finished_semaphore, nullptr);
-        m_render_finished_semaphore = VK_NULL_HANDLE;
     }
 }
 

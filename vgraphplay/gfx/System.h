@@ -17,12 +17,12 @@
 namespace vgraphplay {
     namespace gfx {
         struct Vertex {
-            glm::vec3 pos;
+            glm::vec2 pos;
             glm::vec3 color;
-            glm::vec2 tex;
+            // glm::vec2 tex;
 
-            static VkVertexInputBindingDescription bindingDescription();
-            static std::array<VkVertexInputAttributeDescription, 3> attributeDescription();
+            static vk::VertexInputBindingDescription bindingDescription();
+            static std::array<vk::VertexInputAttributeDescription, 2> attributeDescription();
         };
 
         struct Transormations {
@@ -54,14 +54,16 @@ namespace vgraphplay {
             void initDevice();
             void initSurface();
             void initSwapchain();
-            void initPipeline();
-            void initCommandPool();
-            void initCommandBuffer();
-            void initSynchronizationObjects();
-
             void recreateSwapchain();
 
+            void initPipeline();
+            void initVertexBuffer();
+
+            void initCommandPool();
+            void initCommandBuffer();
             void recordRenderInCommandBuffer(uint32_t image_index);
+            
+            void initSynchronizationObjects();
 
             /* bool initDescriptorSetLayout();
             void cleanupDescriptorSetLayout();
@@ -72,9 +74,6 @@ namespace vgraphplay {
             void cleanupTextureImage();
             void cleanupTextureImageView();
             void cleanupTextureSampler();
-
-            bool initVertexBuffer();
-            void cleanupVertexBuffer();
 
             bool initIndexBuffer();
             void cleanupIndexBuffer();
@@ -118,10 +117,10 @@ namespace vgraphplay {
             vk::raii::CommandPool m_command_pool;
             std::vector<vk::raii::CommandBuffer> m_command_buffers;
 
-            // // Draw data.
-            // VkBuffer m_vertex_buffer, m_index_buffer;
+            // Draw data.
+            vk::raii::Buffer m_vertex_buffer /*, m_index_buffer */;
             // std::vector<VkBuffer> m_uniform_buffers;
-            // VkDeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
+            vk::raii::DeviceMemory m_vertex_buffer_memory /*, m_index_buffer_memory */;
             // std::vector<VkDeviceMemory> m_uniform_buffers_memory;
             // VkImage m_texture_image;
             // VkDeviceMemory m_texture_image_memory;

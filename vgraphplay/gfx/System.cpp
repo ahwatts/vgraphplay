@@ -2,6 +2,8 @@
 
 // #include <chrono>
 // #include <set>
+#include <cassert>
+#include <cstring>
 #include <format>
 #include <vector>
 
@@ -29,6 +31,8 @@ vk::SurfaceFormatKHR chooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceF
 vk::PresentModeKHR chooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR> &available_modes);
 vk::Extent2D chooseSwapchainExtent(GLFWwindow *window, const vk::SurfaceCapabilitiesKHR &caps);
 
+uint32_t chooseMemoryTypeIndex(vk::raii::PhysicalDevice &physical_device, uint32_t type_filter, vk::MemoryPropertyFlags properties);
+
 void transitionImageLayout(
     const vk::raii::CommandBuffer &commands,
     const vk::Image &image,
@@ -43,24 +47,55 @@ void transitionImageLayout(
 const std::vector<unsigned char> &UNLIT_BYTECODE = LOAD_RESOURCE(unlit_slang_spv);
 const std::vector<unsigned char> &WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
 
-const uint16_t NUM_RECTANGLE_VERTICES = 8;
-const vgraphplay::gfx::Vertex RECTANGLE_VERTICES[NUM_RECTANGLE_VERTICES] = {
-    {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+// const uint16_t NUM_RECTANGLE_VERTICES = 8;
+// const vgraphplay::gfx::Vertex RECTANGLE_VERTICES[NUM_RECTANGLE_VERTICES] = {
+//     {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//     {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//     {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//     {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//     {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//     {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//     {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//     {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+// };
+
+// const uint16_t NUM_RECTANGLE_INDICES = 12;
+// const uint16_t RECTANGLE_INDICES[NUM_RECTANGLE_INDICES] = {
+//     0, 1, 2, 2, 3, 0,
+//     4, 5, 6, 6, 7, 4,
+// };
+
+const std::vector<vgraphplay::gfx::Vertex> VERTICES = {
+    {{ 0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}}
 };
 
-const uint16_t NUM_RECTANGLE_INDICES = 12;
-const uint16_t RECTANGLE_INDICES[NUM_RECTANGLE_INDICES] = {
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4,
-};
+vk::VertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
+    return vk::VertexInputBindingDescription{
+        .binding = 0,
+        .stride = sizeof(Vertex),
+        .inputRate = vk::VertexInputRate::eVertex,
+    };
+}
+
+std::array<vk::VertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attributeDescription() {
+    return {
+        vk::VertexInputAttributeDescription{
+            .location = 0,
+            .binding = 0,
+            .format = vk::Format::eR32G32Sfloat,
+            .offset = offsetof(Vertex, pos),
+        },
+        vk::VertexInputAttributeDescription{
+            .location = 1,
+            .binding = 0,
+            .format = vk::Format::eR32G32B32Sfloat,
+            .offset = offsetof(Vertex, color),
+        },
+    };
+}
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL handleDebugMessage(
     vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -97,6 +132,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_command_queue{nullptr},
       m_command_pool{nullptr},
       m_command_buffers{},
+      m_vertex_buffer{nullptr},
+      m_vertex_buffer_memory{nullptr},
       m_surface{nullptr},
       m_swapchain_format{},
       m_swapchain_extent{0, 0},
@@ -134,6 +171,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initSwapchain();
     initPipeline();
     initCommandPool();
+    initVertexBuffer();
     initCommandBuffer();
     initSynchronizationObjects();
 }
@@ -186,9 +224,7 @@ void vgraphplay::gfx::System::initDebugMessenger() {
         return;
     }
 
-    if (m_instance == nullptr) {
-        throw std::runtime_error("Cannot create debug messenger; Vulkan instance is null");
-    }
+    assert(m_instance != nullptr);
 
     vk::DebugUtilsMessengerCreateInfoEXT dm_ci{
         .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
@@ -264,11 +300,10 @@ void vgraphplay::gfx::System::initDevice() {
         return;
     }
 
-    if (m_instance == nullptr || m_surface == nullptr) {
-        throw std::runtime_error("Cannot create device; Vulkan instance or surface is null");
-    }
+    assert(m_instance != nullptr);
+    assert(m_surface != nullptr);
 
-    logPhysicalDevices(m_instance);
+    // logPhysicalDevices(m_instance);
     const std::vector<vk::raii::PhysicalDevice> physical_devices = m_instance.enumeratePhysicalDevices();
     m_physical_device = choosePhysicalDevice(physical_devices);
     BOOST_LOG_TRIVIAL(trace) << "Chose physical device " << m_physical_device.getProperties().deviceName;
@@ -302,7 +337,7 @@ void vgraphplay::gfx::System::initDevice() {
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
     > feature_chain = {
         {},                             // vk::PhysicalDeviceFeatures2, empty (for now)
-        {.shaderDrawParameters = true}, // Enable shader draw parameters (we need this for SV_VertexID in the shader)
+        {/*.shaderDrawParameters = true*/}, // Enable shader draw parameters (we need this for SV_VertexID in the shader)
         {
             .synchronization2 = true,   // Support new synchronization commands
             .dynamicRendering = true,   // Enable dynamic rendering from Vulkan 1.3
@@ -333,9 +368,7 @@ void vgraphplay::gfx::System::initSurface() {
         return;
     }
 
-    if (m_instance == nullptr) {
-        throw std::runtime_error("Cannot create surface; Vulkan instance is null");
-    }
+    assert(m_instance != nullptr);
 
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
     VkResult rslt = glfwCreateWindowSurface(*m_instance, m_window, nullptr, &surface_);
@@ -382,10 +415,10 @@ void vgraphplay::gfx::System::initSwapchain() {
         return;
     }
 
-    if (m_physical_device == nullptr || m_surface == nullptr || m_device == nullptr) {
-        throw std::runtime_error("Cannot create swapchain; Vulkan instance, surface, or device is null");
-    }
-
+    assert(m_physical_device != nullptr);
+    assert(m_surface != nullptr);
+    assert(m_device != nullptr);
+    
     vk::SurfaceCapabilitiesKHR surf_caps = m_physical_device.getSurfaceCapabilitiesKHR(*m_surface);
     std::vector<vk::SurfaceFormatKHR> formats = m_physical_device.getSurfaceFormatsKHR(*m_surface);
     std::vector<vk::PresentModeKHR> modes = m_physical_device.getSurfacePresentModesKHR(*m_surface);
@@ -454,6 +487,94 @@ void vgraphplay::gfx::System::recreateSwapchain() {
     initSwapchain();
 }
 
+void vgraphplay::gfx::System::initVertexBuffer() {
+    assert(m_physical_device != nullptr);
+    assert(m_device != nullptr);
+
+    vk::BufferCreateInfo buf_ci{
+        .size = sizeof(Vertex) * VERTICES.size(),
+        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
+    m_vertex_buffer = m_device.createBuffer(buf_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created vertex buffer: " << *m_vertex_buffer;
+
+    vk::MemoryRequirements mem_reqs = m_vertex_buffer.getMemoryRequirements();
+    uint32_t memory_type = chooseMemoryTypeIndex(
+        m_physical_device,
+        mem_reqs.memoryTypeBits,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    );
+
+    vk::MemoryAllocateInfo mem_ai{
+        .allocationSize = mem_reqs.size,
+        .memoryTypeIndex = memory_type,
+    };
+    m_vertex_buffer_memory = m_device.allocateMemory(mem_ai);
+    BOOST_LOG_TRIVIAL(trace) << "Allocated memory for vertex buffer: " << *m_vertex_buffer_memory;
+    m_vertex_buffer.bindMemory(m_vertex_buffer_memory, 0);
+
+    void *data = m_vertex_buffer_memory.mapMemory(0, buf_ci.size);
+    std::memcpy(data, VERTICES.data(), buf_ci.size);
+    m_vertex_buffer_memory.unmapMemory();
+
+    // VkDeviceSize buffer_size = sizeof(RECTANGLE_VERTICES);
+    // VkBuffer staging_buffer;
+    // VkDeviceMemory staging_buffer_memory;
+    // bool rslt_b = createBuffer(buffer_size,
+    //                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    //                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    //                            staging_buffer,
+    //                            staging_buffer_memory);
+
+    // if (!rslt_b) {
+    //     BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer for vertex buffer";
+    //     return false;
+    // }
+
+    // void *buffer_data;
+    // VkResult rslt = vkMapMemory(m_device, staging_buffer_memory, 0, buffer_size, 0, &buffer_data);
+    // if (rslt == VK_SUCCESS) {
+    //     BOOST_LOG_TRIVIAL(trace) << "Mapped staging buffer memory " << staging_buffer_memory;
+    // } else {
+    //     BOOST_LOG_TRIVIAL(error) << "Unable to map staging buffer memory " << rslt;
+    //     return false;
+    // }
+
+    // Vertex *vertices = static_cast<Vertex*>(buffer_data);
+    // std::copy(RECTANGLE_VERTICES, RECTANGLE_VERTICES + NUM_RECTANGLE_VERTICES, vertices);
+
+    // vkUnmapMemory(m_device, staging_buffer_memory);
+    // BOOST_LOG_TRIVIAL(trace) << "Unmapped staging buffer memory " << staging_buffer_memory;
+
+    // rslt_b = createBuffer(buffer_size,
+    //                       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    //                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    //                       m_vertex_buffer,
+    //                       m_vertex_buffer_memory);
+
+    // if (!rslt_b) {
+    //     BOOST_LOG_TRIVIAL(error) << "Unable to create vertex buffer";
+    //     return false;
+    // }
+
+    // rslt_b = copyBuffer(staging_buffer, m_vertex_buffer, buffer_size);
+    // if (!rslt_b) {
+    //     BOOST_LOG_TRIVIAL(error) << "Unable to copy data to vertex buffer";
+    //     return false;
+    // }
+
+    // BOOST_LOG_TRIVIAL(trace) << "Destroying staging buffer: " << staging_buffer;
+    // vkDestroyBuffer(m_device, staging_buffer, nullptr);
+    // staging_buffer = VK_NULL_HANDLE;
+
+    // BOOST_LOG_TRIVIAL(trace) << "Freeing staging buffer memory: " << staging_buffer_memory;
+    // vkFreeMemory(m_device, staging_buffer_memory, nullptr);
+    // staging_buffer_memory = VK_NULL_HANDLE;
+
+    // return true;
+}
+
 void vgraphplay::gfx::System::initPipeline() {
     if (m_pipeline != nullptr) {
         return;
@@ -483,7 +604,12 @@ void vgraphplay::gfx::System::initPipeline() {
             .pName = "fs_main",
         },
     };
-    vk::PipelineVertexInputStateCreateInfo vertex_input_ci{};
+
+    vk::VertexInputBindingDescription vertex_binding_info = Vertex::bindingDescription();
+    std::array<vk::VertexInputAttributeDescription, 2> vertex_attribute_info = Vertex::attributeDescription();
+    vk::PipelineVertexInputStateCreateInfo vertex_input_ci = vk::PipelineVertexInputStateCreateInfo{}
+        .setVertexBindingDescriptions(vertex_binding_info)
+        .setVertexAttributeDescriptions(vertex_attribute_info);
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly_ci{
         .topology = vk::PrimitiveTopology::eTriangleList,
@@ -661,9 +787,10 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
 
     // Render.
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
+    command_buffer.bindVertexBuffers(0, *m_vertex_buffer, {0});
     command_buffer.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(m_swapchain_extent.width), static_cast<float>(m_swapchain_extent.height)});
     command_buffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, m_swapchain_extent});
-    command_buffer.draw(3, 1, 0, 0);
+    command_buffer.draw(static_cast<uint32_t>(VERTICES.size()), 1, 0, 0);
 
     // Done rendering.
     command_buffer.endRendering();
@@ -1053,86 +1180,6 @@ void vgraphplay::gfx::System::cleanupTextureSampler() {
     }
 }
 
-bool vgraphplay::gfx::System::initVertexBuffer() {
-    if (m_vertex_buffer != VK_NULL_HANDLE &&
-        m_vertex_buffer_memory != VK_NULL_HANDLE)
-    {
-        return true;
-    }
-
-    VkDeviceSize buffer_size = sizeof(RECTANGLE_VERTICES);
-    VkBuffer staging_buffer;
-    VkDeviceMemory staging_buffer_memory;
-    bool rslt_b = createBuffer(buffer_size,
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                               staging_buffer,
-                               staging_buffer_memory);
-
-    if (!rslt_b) {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer for vertex buffer";
-        return false;
-    }
-
-    void *buffer_data;
-    VkResult rslt = vkMapMemory(m_device, staging_buffer_memory, 0, buffer_size, 0, &buffer_data);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Mapped staging buffer memory " << staging_buffer_memory;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to map staging buffer memory " << rslt;
-        return false;
-    }
-
-    Vertex *vertices = static_cast<Vertex*>(buffer_data);
-    std::copy(RECTANGLE_VERTICES, RECTANGLE_VERTICES + NUM_RECTANGLE_VERTICES, vertices);
-
-    vkUnmapMemory(m_device, staging_buffer_memory);
-    BOOST_LOG_TRIVIAL(trace) << "Unmapped staging buffer memory " << staging_buffer_memory;
-
-    rslt_b = createBuffer(buffer_size,
-                          VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                          m_vertex_buffer,
-                          m_vertex_buffer_memory);
-
-    if (!rslt_b) {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create vertex buffer";
-        return false;
-    }
-
-    rslt_b = copyBuffer(staging_buffer, m_vertex_buffer, buffer_size);
-    if (!rslt_b) {
-        BOOST_LOG_TRIVIAL(error) << "Unable to copy data to vertex buffer";
-        return false;
-    }
-
-    BOOST_LOG_TRIVIAL(trace) << "Destroying staging buffer: " << staging_buffer;
-    vkDestroyBuffer(m_device, staging_buffer, nullptr);
-    staging_buffer = VK_NULL_HANDLE;
-
-    BOOST_LOG_TRIVIAL(trace) << "Freeing staging buffer memory: " << staging_buffer_memory;
-    vkFreeMemory(m_device, staging_buffer_memory, nullptr);
-    staging_buffer_memory = VK_NULL_HANDLE;
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupVertexBuffer() {
-    if (m_device != VK_NULL_HANDLE) {
-        if (m_vertex_buffer != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Destroying vertex buffer: " << m_vertex_buffer;
-            vkDestroyBuffer(m_device, m_vertex_buffer, nullptr);
-            m_vertex_buffer = VK_NULL_HANDLE;
-        }
-
-        if (m_vertex_buffer_memory != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Freeing vertex buffer memory: " << m_vertex_buffer_memory;
-            vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
-            m_vertex_buffer_memory = VK_NULL_HANDLE;
-        }
-    }
-}
-
 bool vgraphplay::gfx::System::initIndexBuffer() {
     if (m_index_buffer != VK_NULL_HANDLE && m_index_buffer_memory != VK_NULL_HANDLE) {
         return true;
@@ -1398,21 +1445,6 @@ bool vgraphplay::gfx::System::initDescriptorSets() {
 }
 
 void vgraphplay::gfx::System::cleanupDescriptorSets() {
-}
-
-uint32_t vgraphplay::gfx::System::chooseMemoryTypeIndex(uint32_t type_filter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties mem_props;
-    vkGetPhysicalDeviceMemoryProperties(m_physical_device, &mem_props);
-
-    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
-        if (type_filter & (1 << i) &&
-            (mem_props.memoryTypes[i].propertyFlags & properties) == properties)
-        {
-            return i;
-        }
-    }
-
-    return std::numeric_limits<uint32_t>::max();
 }
 
 VkFormat vgraphplay::gfx::System::chooseFormat(const VkFormat *candidates, int num_candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -1831,4 +1863,18 @@ std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, boo
     }
 
     return rv;
+}
+
+uint32_t chooseMemoryTypeIndex(vk::raii::PhysicalDevice &physical_device, uint32_t type_filter, vk::MemoryPropertyFlags properties) {
+    vk::PhysicalDeviceMemoryProperties mem_props = physical_device.getMemoryProperties();
+    
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        if (type_filter & (1 << i) &&
+            (mem_props.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;            
+        }
+    }
+
+    throw std::runtime_error{"Unable to find suitable memory type"};
 }

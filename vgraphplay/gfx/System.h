@@ -39,11 +39,13 @@ namespace vgraphplay {
 
         class System {
         public:
+            static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+            
             System(GLFWwindow *window, bool debug);
             ~System();
 
             void drawFrame();
-            // void setFramebufferResized();
+            void setFramebufferResized();
 
         private:
             void initInstance();
@@ -52,11 +54,12 @@ namespace vgraphplay {
             void initDevice();
             void initSurface();
             void initSwapchain();
-            // void recreateSwapchain();
             void initPipeline();
             void initCommandPool();
             void initCommandBuffer();
             void initSynchronizationObjects();
+
+            void recreateSwapchain();
 
             void recordRenderInCommandBuffer(uint32_t image_index);
 
@@ -100,6 +103,7 @@ namespace vgraphplay {
 
             bool m_debug;
             GLFWwindow *m_window;
+            uint32_t m_frame_index;
 
             // Instance, device, and debug callback.
             vk::raii::Context m_context;
@@ -112,7 +116,7 @@ namespace vgraphplay {
             uint32_t m_command_queue_family_index;
             vk::raii::Queue m_command_queue;
             vk::raii::CommandPool m_command_pool;
-            vk::raii::CommandBuffer m_command_buffer;
+            std::vector<vk::raii::CommandBuffer> m_command_buffers;
 
             // // Draw data.
             // VkBuffer m_vertex_buffer, m_index_buffer;
@@ -132,7 +136,7 @@ namespace vgraphplay {
             vk::raii::SwapchainKHR m_swapchain;
             std::vector<vk::Image> m_swapchain_images;
             std::vector<vk::raii::ImageView> m_swapchain_image_views;
-            // bool m_framebuffer_resized;
+            bool m_framebuffer_resized;
             // VkImage m_depth_image;
             // VkDeviceMemory m_depth_image_memory;
             // VkImageView m_depth_image_view;
@@ -146,9 +150,9 @@ namespace vgraphplay {
             // std::vector<VkDescriptorSet> m_descriptor_sets;
             
             // Synchronization objects.
-            vk::raii::Semaphore m_present_complete_semaphore;
+            std::vector<vk::raii::Semaphore> m_present_complete_semaphores;
             std::vector<vk::raii::Semaphore> m_render_finished_semaphores;
-            vk::raii::Fence m_draw_fence;
+            std::vector<vk::raii::Fence> m_draw_fences;
         };
     }
 }

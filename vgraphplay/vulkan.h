@@ -9,6 +9,10 @@
 #define VK_ENABLE_BETA_EXTENSIONS
 #endif
 
+// We need this so that vk::Result::eErrorOutOfDateKHR gets returned instead of 
+// throwing an exception.
+#define VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS 1
+
 // Include the Vulkan C++ RAII bindings. If C++20 modules are available, use
 // those.
 #if defined(__INTELLISENSE__) || !defined(USE_CPP_20_MODULES)

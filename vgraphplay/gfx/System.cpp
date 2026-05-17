@@ -87,6 +87,7 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL handleDebugMessage(
 vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     : m_debug{debug},
       m_window{window},
+      m_frame_index{0},
       m_context{},
       m_instance{nullptr},
       m_debug_messenger{nullptr},
@@ -95,7 +96,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_command_queue_family_index{~static_cast<uint32_t>(0)},
       m_command_queue{nullptr},
       m_command_pool{nullptr},
-      m_command_buffer{nullptr},
+      m_command_buffers{},
       m_surface{nullptr},
       m_swapchain_format{},
       m_swapchain_extent{0, 0},
@@ -103,11 +104,12 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_swapchain{nullptr},
       m_swapchain_images{},
       m_swapchain_image_views{},
+      m_framebuffer_resized{false},
       m_pipeline_layout{nullptr},
       m_pipeline{nullptr},
-      m_present_complete_semaphore{nullptr},
+      m_present_complete_semaphores{},
       m_render_finished_semaphores{},
-      m_draw_fence{nullptr}
+      m_draw_fences{}
     //   m_present_queue{VK_NULL_HANDLE},
     //   m_vertex_buffer{VK_NULL_HANDLE},
     //   m_index_buffer{VK_NULL_HANDLE},
@@ -439,6 +441,7 @@ void vgraphplay::gfx::System::initSwapchain() {
     BOOST_LOG_TRIVIAL(trace) << "Created swapchain: " << *m_swapchain;
     m_swapchain_images = m_swapchain.getImages();
     BOOST_LOG_TRIVIAL(trace) << "Retrieved " << m_swapchain_images.size() << " swapchain images";
+    m_swapchain_image_count = m_swapchain_images.size();
 
     m_swapchain_image_views.clear();
     vk::ImageViewCreateInfo imgv_ci{
@@ -460,35 +463,20 @@ void vgraphplay::gfx::System::initSwapchain() {
     }
 }
 
-// void vgraphplay::gfx::System::recreateSwapchain() {
-//     int width{0}, height{0};
+void vgraphplay::gfx::System::recreateSwapchain() {
+    int width{0}, height{0};
+    glfwGetFramebufferSize(m_window, &width, &height);
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(m_window, &width, &height);
+        glfwWaitEvents();
+    }
 
-//     while (width == 0 && height == 0) {
-//         glfwGetFramebufferSize(m_window, &width, &height);
-//         glfwWaitEvents();
-//     }
-
-//     if (m_device != VK_NULL_HANDLE) {
-//         vkDeviceWaitIdle(m_device);
-//     }
-
-//     cleanupCommandBuffers();
-//     cleanupSwapchainFramebuffers();
-//     cleanupPipeline();
-//     cleanupPipelineLayout();
-//     cleanupRenderPass();
-//     cleanupSwapchain();
-//     cleanupDepthResources();
-
-//     bool rv = initSwapchain();
-//     rv = rv && initRenderPass();
-//     rv = rv && initPipelineLayout();
-//     rv = rv && initPipeline();
-//     rv = rv && initDepthResources();
-//     rv = rv && initSwapchainFramebuffers();
-//     rv = rv && initCommandBuffers();
-//     rv = rv && recordCommandBuffers();
-// }
+    m_device.waitIdle();
+    m_swapchain_image_views.clear();
+    m_swapchain_images.clear();
+    m_swapchain = nullptr;
+    initSwapchain();
+}
 
 void vgraphplay::gfx::System::initPipeline() {
     if (m_pipeline != nullptr) {
@@ -607,7 +595,7 @@ void vgraphplay::gfx::System::initCommandPool() {
 }
 
 void vgraphplay::gfx::System::initCommandBuffer() {
-    if (m_command_buffer != nullptr) {
+    if (!m_command_buffers.empty()) {
         return;
     }
 
@@ -618,11 +606,13 @@ void vgraphplay::gfx::System::initCommandBuffer() {
     vk::CommandBufferAllocateInfo cb_ai{
         .commandPool = m_command_pool,
         .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1,
+        .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     };
 
-    m_command_buffer = std::move(vk::raii::CommandBuffers(m_device, cb_ai).front());
-    BOOST_LOG_TRIVIAL(trace) << "Created command buffer: " << *m_command_buffer;
+    m_command_buffers = vk::raii::CommandBuffers(m_device, cb_ai);
+    for (auto &b : m_command_buffers) {
+        BOOST_LOG_TRIVIAL(trace) << "Created command buffer: " << *b;
+    }
 }
 
 void transitionImageLayout(
@@ -662,11 +652,13 @@ void transitionImageLayout(
 }
 
 void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) {
-    m_command_buffer.begin({});
+    vk::raii::CommandBuffer &command_buffer = m_command_buffers[m_frame_index];
+
+    command_buffer.begin({});
     
     // Transition the image to the color attachment layout.
     transitionImageLayout(
-        m_command_buffer, 
+        command_buffer, 
         m_swapchain_images[image_index],
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eColorAttachmentOptimal,
@@ -689,20 +681,20 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
         .renderArea = {.offset = {0, 0}, .extent = m_swapchain_extent},
         .layerCount = 1,
     }.setColorAttachments(rai);
-    m_command_buffer.beginRendering(ri);
+    command_buffer.beginRendering(ri);
 
     // Render.
-    m_command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
-    m_command_buffer.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(m_swapchain_extent.width), static_cast<float>(m_swapchain_extent.height)});
-    m_command_buffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, m_swapchain_extent});
-    m_command_buffer.draw(3, 1, 0, 0);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
+    command_buffer.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(m_swapchain_extent.width), static_cast<float>(m_swapchain_extent.height)});
+    command_buffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, m_swapchain_extent});
+    command_buffer.draw(3, 1, 0, 0);
 
     // Done rendering.
-    m_command_buffer.endRendering();
+    command_buffer.endRendering();
 
     // Transition the image to be presentable.
     transitionImageLayout(
-        m_command_buffer,
+        command_buffer,
         m_swapchain_images[image_index],
         vk::ImageLayout::eColorAttachmentOptimal,
         vk::ImageLayout::ePresentSrcKHR,
@@ -712,7 +704,7 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
         vk::PipelineStageFlagBits2::eBottomOfPipe
     );
 
-    m_command_buffer.end();
+    command_buffer.end();
 }
 
 void vgraphplay::gfx::System::initSynchronizationObjects() {
@@ -720,49 +712,72 @@ void vgraphplay::gfx::System::initSynchronizationObjects() {
         throw std::runtime_error{"Unable to create synchronization objects; device is null"};
     }
 
-    for (int i = 0; i < m_swapchain_image_count; ++i) {
-        m_render_finished_semaphores.push_back(m_device.createSemaphore({}));
+    for (size_t i = 0; i < m_swapchain_image_count; ++i) {
+        m_render_finished_semaphores.emplace_back(m_device, vk::SemaphoreCreateInfo{});
         BOOST_LOG_TRIVIAL(trace) << "Created semaphore (render finished) for image " << i << ": " << *m_render_finished_semaphores.back();
     }
 
-    m_present_complete_semaphore = m_device.createSemaphore({});
-    BOOST_LOG_TRIVIAL(trace) << "Created semaphore (present complete): " << *m_present_complete_semaphore;
-    m_draw_fence = m_device.createFence({.flags = vk::FenceCreateFlagBits::eSignaled});
-    BOOST_LOG_TRIVIAL(trace) << "Created fence (draw): " << *m_draw_fence;
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)  {
+        m_present_complete_semaphores.emplace_back(m_device, vk::SemaphoreCreateInfo{});
+        BOOST_LOG_TRIVIAL(trace) << "Created semaphore (present complete) for frame " << i << ": " << *m_present_complete_semaphores.back();
+        m_draw_fences.emplace_back(m_device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
+        BOOST_LOG_TRIVIAL(trace) << "Created fence (draw) for frame " << i << ": " << *m_draw_fences.back();
+    }
 }
 
 void vgraphplay::gfx::System::drawFrame() {
-    vk::Result result = m_device.waitForFences(*m_draw_fence, vk::True, UINT64_MAX);
+    vk::raii::CommandBuffer &command_buffer = m_command_buffers[m_frame_index];
+    vk::raii::Semaphore &present_complete = m_present_complete_semaphores[m_frame_index];
+    vk::raii::Fence &draw_fence = m_draw_fences[m_frame_index];
+
+    vk::Result result = m_device.waitForFences(*draw_fence, vk::True, UINT64_MAX);
     if (result != vk::Result::eSuccess) {
         throw std::runtime_error{"Error waiting for draw fence"};
     }
-    m_device.resetFences(*m_draw_fence);
 
-    auto [result2, image_index] = m_swapchain.acquireNextImage(UINT64_MAX, *m_present_complete_semaphore, nullptr);
-    if (result2 != vk::Result::eSuccess) {
+    auto [result2, image_index] = m_swapchain.acquireNextImage(
+        UINT64_MAX, 
+        *present_complete, 
+        nullptr
+    );
+    if (result2 == vk::Result::eErrorOutOfDateKHR) {
+        recreateSwapchain();
+        return;
+    } else if (result2 != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
         throw std::runtime_error{"Error acquiring next swapchain image"};
     }
 
-    vk::raii::Semaphore &render_finished_semaphore = m_render_finished_semaphores[image_index];
+    m_device.resetFences(*draw_fence);
+
+    vk::raii::Semaphore &render_finished = m_render_finished_semaphores[image_index];
     recordRenderInCommandBuffer(image_index);
 
     vk::PipelineStageFlags wait_dst_stage_mask{vk::PipelineStageFlagBits::eColorAttachmentOutput};
     vk::SubmitInfo submit_info = vk::SubmitInfo{.pWaitDstStageMask = &wait_dst_stage_mask}
-        .setWaitSemaphores(*m_present_complete_semaphore)
-        .setCommandBuffers(*m_command_buffer)
-        .setSignalSemaphores(*render_finished_semaphore);
+        .setWaitSemaphores(*present_complete)
+        .setCommandBuffers(*command_buffer)
+        .setSignalSemaphores(*render_finished);
 
-    m_command_queue.submit(submit_info, *m_draw_fence);
+    m_command_queue.submit(submit_info, *draw_fence);
 
     vk::PresentInfoKHR present_info = vk::PresentInfoKHR{}
-        .setWaitSemaphores(*render_finished_semaphore)
+        .setWaitSemaphores(*render_finished)
         .setSwapchains(*m_swapchain)
         .setImageIndices(image_index);
 
     result = m_command_queue.presentKHR(present_info);
-    if (result != vk::Result::eSuccess) {
+    if (result == vk::Result::eSuboptimalKHR || result == vk::Result::eErrorOutOfDateKHR || m_framebuffer_resized) {
+        m_framebuffer_resized = false;
+        recreateSwapchain();
+    } else if (result != vk::Result::eSuccess) {
         throw std::runtime_error{"Error presenting new image"};
     }
+
+    m_frame_index = (m_frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void vgraphplay::gfx::System::setFramebufferResized() {
+    m_framebuffer_resized = true;
 }
 
 /* bool vgraphplay::gfx::System::initDescriptorSetLayout() {
@@ -1794,13 +1809,9 @@ bool vgraphplay::gfx::System::endOneTimeCommands(VkCommandBuffer commands) {
 
     vkFreeCommandBuffers(m_device, m_command_pool, 1, &commands);
     return true;
-} */
+}
 
-// void vgraphplay::gfx::System::setFramebufferResized() {
-//     m_framebuffer_resized = true;
-// }
-
-/* VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
+VkVertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
     VkVertexInputBindingDescription desc;
     desc.binding = 0;
     desc.stride = sizeof(Vertex);

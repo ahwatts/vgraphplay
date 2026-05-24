@@ -4,6 +4,7 @@
 #define _VGRAPHPLAY_VGRAPHPLAY_GFX_SYSTEM_H_
 
 #include <array>
+#include <utility>
 #include <vector>
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
@@ -52,12 +53,16 @@ namespace vgraphplay {
 
             void initPipeline();
             void initVertexBuffer();
+            void initIndexBuffer();
 
             void initCommandPool();
             void initCommandBuffer();
             void recordRenderInCommandBuffer(uint32_t image_index);
             
             void initSynchronizationObjects();
+
+            std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+            void copyBuffer(vk::raii::Buffer &src, vk::raii::Buffer &dst, vk::DeviceSize size);
 
             /* bool initDescriptorSetLayout();
             void cleanupDescriptorSetLayout();
@@ -68,9 +73,6 @@ namespace vgraphplay {
             void cleanupTextureImage();
             void cleanupTextureImageView();
             void cleanupTextureSampler();
-
-            bool initIndexBuffer();
-            void cleanupIndexBuffer();
 
             bool initUniformBuffers();
             void cleanupUniformBuffers();
@@ -84,11 +86,9 @@ namespace vgraphplay {
             void cleanupDepthResources();
             VkFormat chooseDepthFormat();
 
-            bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags mem_props, VkBuffer &buffer, VkDeviceMemory &memory);
             bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
             VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
 
-            bool copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
             bool copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height);
 
             VkCommandBuffer beginOneTimeCommands();
@@ -112,9 +112,9 @@ namespace vgraphplay {
             std::vector<vk::raii::CommandBuffer> m_command_buffers;
 
             // Draw data.
-            vk::raii::Buffer m_vertex_buffer /*, m_index_buffer */;
+            vk::raii::Buffer m_vertex_buffer, m_index_buffer;
             // std::vector<VkBuffer> m_uniform_buffers;
-            vk::raii::DeviceMemory m_vertex_buffer_memory /*, m_index_buffer_memory */;
+            vk::raii::DeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
             // std::vector<VkDeviceMemory> m_uniform_buffers_memory;
             // VkImage m_texture_image;
             // VkDeviceMemory m_texture_image_memory;

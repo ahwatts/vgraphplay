@@ -549,7 +549,7 @@ void vgraphplay::gfx::System::copyBuffer(vk::raii::Buffer &src, vk::raii::Buffer
 }
 
 void vgraphplay::gfx::System::initVertexBuffer() {
-    vk::DeviceSize vertex_buffer_size = sizeof(std::remove_reference<decltype(RECTANGLE_VERTICES)>::type::value_type) * RECTANGLE_VERTICES.size();
+    vk::DeviceSize vertex_buffer_size = sizeof(decltype(RECTANGLE_VERTICES)::value_type) * RECTANGLE_VERTICES.size();
 
     auto [staging_buffer, staging_buffer_memory] = createBuffer(
         vertex_buffer_size,
@@ -571,7 +571,7 @@ void vgraphplay::gfx::System::initVertexBuffer() {
 }
 
 void vgraphplay::gfx::System::initIndexBuffer() {
-    vk::DeviceSize index_buffer_size = sizeof(std::remove_reference<decltype(RECTANGLE_INDICES)>::type::value_type) * RECTANGLE_INDICES.size();
+    vk::DeviceSize index_buffer_size = sizeof(decltype(RECTANGLE_INDICES)::value_type) * RECTANGLE_INDICES.size();
 
     auto [staging_buffer, staging_buffer_memory] = createBuffer(
         index_buffer_size,

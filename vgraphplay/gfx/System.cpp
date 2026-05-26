@@ -1,6 +1,6 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
-// #include <chrono>
+#include <chrono>
 // #include <set>
 #include <cassert>
 #include <cstring>
@@ -11,8 +11,8 @@
 #include <boost/log/trivial.hpp>
 
 // #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-// #include <glm/glm.hpp>
-// #include <glm/gtc/matrix_transform.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 // #define STB_IMAGE_IMPLEMENTATION
 // #include <stb_image.h>
@@ -145,8 +145,11 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_command_buffers{},
       m_vertex_buffer{nullptr},
       m_index_buffer{nullptr},
+      m_uniform_buffers{},
       m_vertex_buffer_memory{nullptr},
       m_index_buffer_memory{nullptr},
+      m_uniform_buffers_memory{},
+      m_uniform_buffers_mapped{},
       m_surface{nullptr},
       m_swapchain_format{},
       m_swapchain_extent{0, 0},
@@ -157,6 +160,9 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_framebuffer_resized{false},
       m_pipeline_layout{nullptr},
       m_pipeline{nullptr},
+      m_descriptor_set_layout{nullptr},
+      m_descriptor_pool{nullptr},
+      m_descriptor_sets{},
       m_present_complete_semaphores{},
       m_render_finished_semaphores{},
       m_draw_fences{}
@@ -182,10 +188,14 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initSurface();
     initDevice();
     initSwapchain();
+    initDescriptorSetLayout();
     initPipeline();
     initCommandPool();
     initVertexBuffer();
     initIndexBuffer();
+    initUniformBuffers();
+    initDescriptorPool();
+    initDescriptorSets();
     initCommandBuffer();
     initSynchronizationObjects();
 }
@@ -501,9 +511,21 @@ void vgraphplay::gfx::System::recreateSwapchain() {
     initSwapchain();
 }
 
-std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
+std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::createBuffer(
+    vk::DeviceSize size, 
+    vk::BufferUsageFlags usage, 
+    vk::MemoryPropertyFlags properties, 
+    std::optional<const char *> name
+) {
     assert(m_physical_device != nullptr);
     assert(m_device != nullptr);
+
+    std::string buffer_name;
+    if (name.has_value()) {
+        buffer_name = std::string{name.value()} + " buffer";
+    } else {
+        buffer_name = "buffer";
+    }
 
     vk::BufferCreateInfo buf_ci{
         .size = size,
@@ -511,7 +533,7 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::cre
         .sharingMode = vk::SharingMode::eExclusive,
     };
     vk::raii::Buffer buffer = m_device.createBuffer(buf_ci);
-    BOOST_LOG_TRIVIAL(trace) << "Created buffer: " << *buffer;
+    BOOST_LOG_TRIVIAL(trace) << "Created " << buffer_name <<": " << *buffer;
 
     vk::MemoryRequirements mem_reqs = buffer.getMemoryRequirements();
     uint32_t memory_type = chooseMemoryTypeIndex(
@@ -525,7 +547,7 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::cre
         .memoryTypeIndex = memory_type,
     };
     vk::raii::DeviceMemory memory = m_device.allocateMemory(mem_ai);
-    BOOST_LOG_TRIVIAL(trace) << "Allocated memory for buffer: " << *memory;
+    BOOST_LOG_TRIVIAL(trace) << "Allocated memory for " << buffer_name << ": " << *memory;
     buffer.bindMemory(memory, 0);
 
     return {std::move(buffer), std::move(memory)};
@@ -554,7 +576,8 @@ void vgraphplay::gfx::System::initVertexBuffer() {
     auto [staging_buffer, staging_buffer_memory] = createBuffer(
         vertex_buffer_size,
         vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        "vertex staging"
     );
 
     void *data = staging_buffer_memory.mapMemory(0, vertex_buffer_size);
@@ -564,7 +587,8 @@ void vgraphplay::gfx::System::initVertexBuffer() {
     std::tie(m_vertex_buffer, m_vertex_buffer_memory) = createBuffer(
         vertex_buffer_size,
         vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        "vertex"
     );
 
     copyBuffer(staging_buffer, m_vertex_buffer, vertex_buffer_size);
@@ -576,7 +600,8 @@ void vgraphplay::gfx::System::initIndexBuffer() {
     auto [staging_buffer, staging_buffer_memory] = createBuffer(
         index_buffer_size,
         vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        "index staging"
     );
 
     void *data = staging_buffer_memory.mapMemory(0, index_buffer_size);
@@ -586,20 +611,83 @@ void vgraphplay::gfx::System::initIndexBuffer() {
     std::tie(m_index_buffer, m_index_buffer_memory) = createBuffer(
         index_buffer_size,
         vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        "index"
     );
 
     copyBuffer(staging_buffer, m_index_buffer, index_buffer_size);
 }
 
-void vgraphplay::gfx::System::initPipeline() {
-    if (m_pipeline != nullptr) {
-        return;
-    }
+void vgraphplay::gfx::System::initUniformBuffers() {
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        vk::DeviceSize buffer_size = sizeof(Transformations);
+        auto [buffer, buffer_memory] = createBuffer(
+            buffer_size,
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            "uniform"
+        );
 
-    if (m_device == nullptr) {
-        throw std::runtime_error("Unable to create pipeline; device is null");
+        m_uniform_buffers.emplace_back(std::move(buffer));
+        m_uniform_buffers_memory.emplace_back(std::move(buffer_memory));
+        m_uniform_buffers_mapped.emplace_back(m_uniform_buffers_memory.back().mapMemory(0, buffer_size));
     }
+}
+
+void vgraphplay::gfx::System::initDescriptorSetLayout() {
+    assert(m_device != nullptr);
+
+    vk::DescriptorSetLayoutBinding dsl_lb{
+        .binding = 0,
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = 1,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+    };
+
+    vk::DescriptorSetLayoutCreateInfo dsl_ci = vk::DescriptorSetLayoutCreateInfo{}.setBindings(dsl_lb);
+    m_descriptor_set_layout = m_device.createDescriptorSetLayout(dsl_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created descriptor set layout: " << *m_descriptor_set_layout;
+}
+
+void vgraphplay::gfx::System::initDescriptorPool() {
+    vk::DescriptorPoolSize dp_sz{
+        .type = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+    };
+    vk::DescriptorPoolCreateInfo dp_ci = vk::DescriptorPoolCreateInfo{
+        .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+        .maxSets = MAX_FRAMES_IN_FLIGHT,
+    }.setPoolSizes(dp_sz);
+    m_descriptor_pool = m_device.createDescriptorPool(dp_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created descriptor pool: " << *m_descriptor_pool;
+}
+
+void vgraphplay::gfx::System::initDescriptorSets() {
+    std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *m_descriptor_set_layout);
+    vk::DescriptorSetAllocateInfo ds_ai = vk::DescriptorSetAllocateInfo{
+        .descriptorPool = *m_descriptor_pool,
+    }.setSetLayouts(layouts);
+    m_descriptor_sets = m_device.allocateDescriptorSets(ds_ai);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        BOOST_LOG_TRIVIAL(trace) << "Allocated descriptor set " << i << ": " << *m_descriptor_sets[i];
+        vk::DescriptorBufferInfo buffer_info{
+            .buffer = *m_uniform_buffers[i],
+            .offset = 0,
+            .range = sizeof(Transformations),
+        };
+        vk::WriteDescriptorSet ds_write = vk::WriteDescriptorSet{
+            .dstSet = *m_descriptor_sets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = vk::DescriptorType::eUniformBuffer,
+        }.setBufferInfo(buffer_info);
+        m_device.updateDescriptorSets(ds_write, {});
+    }
+}
+
+void vgraphplay::gfx::System::initPipeline() {
+    assert(m_device != nullptr);
     
     vk::ShaderModuleCreateInfo sm_ci = vk::ShaderModuleCreateInfo{
         // This sizeof() is a very verbose way to say 1...
@@ -642,7 +730,7 @@ void vgraphplay::gfx::System::initPipeline() {
         .rasterizerDiscardEnable = vk::False,
         .polygonMode = vk::PolygonMode::eFill,
         .cullMode = vk::CullModeFlagBits::eBack,
-        .frontFace = vk::FrontFace::eClockwise,
+        .frontFace = vk::FrontFace::eCounterClockwise,
         .depthBiasEnable = vk::False,
         .lineWidth = 1.0f,
     };
@@ -667,10 +755,10 @@ void vgraphplay::gfx::System::initPipeline() {
     };
     vk::PipelineDynamicStateCreateInfo dynamic_state_ci = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamic_states);
 
-    vk::PipelineLayoutCreateInfo layout_ci{
+    vk::PipelineLayoutCreateInfo layout_ci = vk::PipelineLayoutCreateInfo{
         .setLayoutCount = 0,
         .pushConstantRangeCount = 0,
-    };
+    }.setSetLayouts(*m_descriptor_set_layout);
     m_pipeline_layout = m_device.createPipelineLayout(layout_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created pipeline layout: " << *m_pipeline_layout;
 
@@ -770,6 +858,33 @@ void transitionImageLayout(
     commands.pipelineBarrier2(dep);
 }
 
+void vgraphplay::gfx::System::updateUniformBuffer(uint32_t frame_index) {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    Transformations xforms;
+    xforms.model = glm::rotate(
+        glm::mat4(1.0f), 
+        time * glm::radians(90.0f), 
+        glm::vec3(0.0f, 0.0f, 1.0f)
+    );
+    xforms.view = glm::lookAt(
+        glm::vec3(2.0f, 2.0f, 2.0f), 
+        glm::vec3(0.0f, 0.0f, 0.0f), 
+        glm::vec3(0.0f, 0.0f, 1.0f)
+    );
+    xforms.projection = glm::perspective(
+        glm::radians(45.0f),
+        static_cast<float>(m_swapchain_extent.width) / static_cast<float>(m_swapchain_extent.height),
+        0.01f,
+        10.0f
+    );
+    xforms.projection[1][1] *= -1;
+    std::memcpy(m_uniform_buffers_mapped[frame_index], &xforms, sizeof(xforms));
+}
+
 void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) {
     vk::raii::CommandBuffer &command_buffer = m_command_buffers[m_frame_index];
 
@@ -806,6 +921,7 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
     command_buffer.bindVertexBuffers(0, *m_vertex_buffer, {0});
     command_buffer.bindIndexBuffer(*m_index_buffer, {0}, vk::IndexType::eUint32);
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline_layout, 0, *m_descriptor_sets[m_frame_index], nullptr);
     command_buffer.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(m_swapchain_extent.width), static_cast<float>(m_swapchain_extent.height)});
     command_buffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, m_swapchain_extent});
     command_buffer.drawIndexed(static_cast<uint32_t>(RECTANGLE_INDICES.size()), 1, 0, 0, 0);
@@ -869,7 +985,8 @@ void vgraphplay::gfx::System::drawFrame() {
     }
 
     m_device.resetFences(*draw_fence);
-
+    updateUniformBuffer(m_frame_index);
+    
     vk::raii::Semaphore &render_finished = m_render_finished_semaphores[image_index];
     recordRenderInCommandBuffer(image_index);
 
@@ -901,58 +1018,7 @@ void vgraphplay::gfx::System::setFramebufferResized() {
     m_framebuffer_resized = true;
 }
 
-/* bool vgraphplay::gfx::System::initDescriptorSetLayout() {
-    if (m_descriptor_set_layout != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Unable to create descriptor set layout.";
-        return false;
-    }
-
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
-
-    // UBO binding.
-    bindings[0].binding = 0;
-    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    bindings[0].descriptorCount = 1;
-    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    bindings[0].pImmutableSamplers = nullptr;
-
-    // Sampler binding.
-    bindings[1].binding = 1;
-    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    bindings[1].descriptorCount = 1;
-    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[1].pImmutableSamplers = nullptr;
-
-    VkDescriptorSetLayoutCreateInfo dsl_ci;
-    dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_ci.pNext = nullptr;
-    dsl_ci.flags = 0;
-    dsl_ci.bindingCount = static_cast<uint32_t>(bindings.size());
-    dsl_ci.pBindings = bindings.data();
-
-    VkResult rslt = vkCreateDescriptorSetLayout(m_device, &dsl_ci, nullptr, &m_descriptor_set_layout);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created descriptor set layout: " << m_descriptor_set_layout;
-        return true;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating descriptor set layout " << rslt;
-        return false;
-    }
-}
-
-void vgraphplay::gfx::System::cleanupDescriptorSetLayout() {
-    if (m_device != VK_NULL_HANDLE && m_descriptor_set_layout != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying descriptor set layout: " << m_descriptor_set_layout;
-        vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
-        m_descriptor_set_layout = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initDepthResources() {
+/* bool vgraphplay::gfx::System::initDepthResources() {
     VkFormat depth_format = chooseDepthFormat();
     bool brslt = createImage(m_swapchain_extent.width, m_swapchain_extent.height,
                 depth_format,

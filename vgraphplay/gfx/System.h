@@ -4,6 +4,7 @@
 #define _VGRAPHPLAY_VGRAPHPLAY_GFX_SYSTEM_H_
 
 #include <array>
+#include <optional>
 #include <utility>
 #include <vector>
 #include <glm/mat4x4.hpp>
@@ -26,11 +27,11 @@ namespace vgraphplay {
             static std::array<vk::VertexInputAttributeDescription, 2> attributeDescription();
         };
 
-        // struct Transormations {
-        //     glm::mat4x4 model;
-        //     glm::mat4x4 view;
-        //     glm::mat4x4 projection;
-        // };
+        struct Transformations {
+            glm::mat4x4 model;
+            glm::mat4x4 view;
+            glm::mat4x4 projection;
+        };
 
         class System {
         public:
@@ -51,36 +52,37 @@ namespace vgraphplay {
             void initSwapchain();
             void recreateSwapchain();
 
+            void initDescriptorSetLayout();
+            void initDescriptorPool();
+            void initDescriptorSets();
             void initPipeline();
+            
             void initVertexBuffer();
             void initIndexBuffer();
+            void initUniformBuffers();
 
             void initCommandPool();
             void initCommandBuffer();
-            void recordRenderInCommandBuffer(uint32_t image_index);
             
             void initSynchronizationObjects();
 
-            std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+            void updateUniformBuffer(uint32_t image_index);
+            void recordRenderInCommandBuffer(uint32_t image_index);
+
+            std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
+                vk::DeviceSize size, 
+                vk::BufferUsageFlags usage, 
+                vk::MemoryPropertyFlags properties,
+                std::optional<const char *> name = std::nullopt
+            );
             void copyBuffer(vk::raii::Buffer &src, vk::raii::Buffer &dst, vk::DeviceSize size);
 
-            /* bool initDescriptorSetLayout();
-            void cleanupDescriptorSetLayout();
-
-            bool initTextureImage();
+            /* bool initTextureImage();
             bool initTextureImageView();
             bool initTextureSampler();
             void cleanupTextureImage();
             void cleanupTextureImageView();
             void cleanupTextureSampler();
-
-            bool initUniformBuffers();
-            void cleanupUniformBuffers();
-            void updateUniformBuffer(uint32_t current_image);
-            bool initDescriptorPool();
-            void cleanupDescriptorPool();
-            bool initDescriptorSets();
-            void cleanupDescriptorSets();
 
             bool initDepthResources();
             void cleanupDepthResources();
@@ -113,9 +115,10 @@ namespace vgraphplay {
 
             // Draw data.
             vk::raii::Buffer m_vertex_buffer, m_index_buffer;
-            // std::vector<VkBuffer> m_uniform_buffers;
+            std::vector<vk::raii::Buffer> m_uniform_buffers;
             vk::raii::DeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
-            // std::vector<VkDeviceMemory> m_uniform_buffers_memory;
+            std::vector<vk::raii::DeviceMemory> m_uniform_buffers_memory;
+            std::vector<void *> m_uniform_buffers_mapped;
             // VkImage m_texture_image;
             // VkDeviceMemory m_texture_image_memory;
             // VkImageView m_texture_image_view;
@@ -137,9 +140,9 @@ namespace vgraphplay {
             // Pipeline-related structures.
             vk::raii::PipelineLayout m_pipeline_layout;
             vk::raii::Pipeline m_pipeline;
-            // VkDescriptorSetLayout m_descriptor_set_layout;
-            // VkDescriptorPool m_descriptor_pool;
-            // std::vector<VkDescriptorSet> m_descriptor_sets;
+            vk::raii::DescriptorSetLayout m_descriptor_set_layout;
+            vk::raii::DescriptorPool m_descriptor_pool;
+            std::vector<vk::raii::DescriptorSet> m_descriptor_sets;
             
             // Synchronization objects.
             std::vector<vk::raii::Semaphore> m_present_complete_semaphores;

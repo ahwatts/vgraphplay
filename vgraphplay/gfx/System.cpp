@@ -1,7 +1,6 @@
 // -*- mode: c++; c-basic-offset: 4; encoding: utf-8; -*-
 
 #include <chrono>
-// #include <set>
 #include <cassert>
 #include <cstring>
 #include <format>
@@ -10,13 +9,10 @@
 
 #include <boost/log/trivial.hpp>
 
-// #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 // #define STB_IMAGE_IMPLEMENTATION
 // #include <stb_image.h>
 
+#include "../glm.h"
 #include "../vulkan.h"
 
 #include "System.h"

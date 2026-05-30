@@ -1,7 +1,9 @@
+/.cache
+/.vscode
 /build*
 /out
+.clangd
 *.suo
 gmon.out
-/.vscode
 CMakeUserPresets.json
 .DS_Store

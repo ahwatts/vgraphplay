@@ -57,10 +57,10 @@ const std::vector<unsigned char> &WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
 // };
 
 const std::vector<vgraphplay::gfx::Vertex> RECTANGLE_VERTICES = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 };
 
 const std::vector<uint32_t> RECTANGLE_INDICES = {
@@ -75,7 +75,7 @@ vk::VertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() 
     };
 }
 
-std::array<vk::VertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attributeDescription() {
+std::array<vk::VertexInputAttributeDescription, 3> vgraphplay::gfx::Vertex::attributeDescription() {
     return {
         vk::VertexInputAttributeDescription{
             .location = 0,
@@ -88,6 +88,12 @@ std::array<vk::VertexInputAttributeDescription, 2> vgraphplay::gfx::Vertex::attr
             .binding = 0,
             .format = vk::Format::eR32G32B32Sfloat,
             .offset = offsetof(Vertex, color),
+        },
+        vk::VertexInputAttributeDescription{
+            .location = 2,
+            .binding = 0,
+            .format = vk::Format::eR32G32Sfloat,
+            .offset = offsetof(Vertex, tex),
         },
     };
 }
@@ -154,7 +160,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_present_complete_semaphores{},
       m_render_finished_semaphores{},
       m_draw_fences{}
-    //   m_texture_sampler{VK_NULL_HANDLE},
     //   m_depth_image{VK_NULL_HANDLE},
     //   m_depth_image_memory{VK_NULL_HANDLE},
     //   m_depth_image_view{VK_NULL_HANDLE},
@@ -279,7 +284,7 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
         const auto features = dev.getFeatures2<
             vk::PhysicalDeviceFeatures2,
             vk::PhysicalDeviceVulkan11Features,
-            vk::PhysicalDeviceVulkan13Features, 
+            vk::PhysicalDeviceVulkan13Features,
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
         >();
         bool supports_required_features =
@@ -288,9 +293,9 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
             features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
             features.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
-        if (supports_vulkan_13 && 
-            supports_graphics && 
-            supports_all_extensions && 
+        if (supports_vulkan_13 &&
+            supports_graphics &&
+            supports_all_extensions &&
             supports_required_features)
         {
             return dev;
@@ -336,9 +341,9 @@ void vgraphplay::gfx::System::initDevice() {
     };
 
     vk::StructureChain<
-        vk::PhysicalDeviceFeatures2, 
+        vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan11Features,
-        vk::PhysicalDeviceVulkan13Features, 
+        vk::PhysicalDeviceVulkan13Features,
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
     > feature_chain = {
         vk::PhysicalDeviceFeatures2{
@@ -352,7 +357,7 @@ void vgraphplay::gfx::System::initDevice() {
         vk::PhysicalDeviceVulkan13Features{
             .synchronization2 = true, // Support new synchronization commands
             .dynamicRendering = true, // Enable dynamic rendering from Vulkan 1.3
-        },     
+        },
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{
             .extendedDynamicState = true // Enable extended dynamic state from the extension
         },
@@ -431,7 +436,7 @@ void vgraphplay::gfx::System::initSwapchain() {
     assert(m_physical_device != nullptr);
     assert(m_surface != nullptr);
     assert(m_device != nullptr);
-    
+
     vk::SurfaceCapabilitiesKHR surf_caps = m_physical_device.getSurfaceCapabilitiesKHR(*m_surface);
     std::vector<vk::SurfaceFormatKHR> formats = m_physical_device.getSurfaceFormatsKHR(*m_surface);
     std::vector<vk::PresentModeKHR> modes = m_physical_device.getSurfacePresentModesKHR(*m_surface);
@@ -491,9 +496,9 @@ void vgraphplay::gfx::System::recreateSwapchain() {
 }
 
 std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::createBuffer(
-    vk::DeviceSize size, 
-    vk::BufferUsageFlags usage, 
-    vk::MemoryPropertyFlags properties, 
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    vk::MemoryPropertyFlags properties,
     std::optional<const char *> name
 ) {
     assert(m_physical_device != nullptr);
@@ -605,27 +610,41 @@ void vgraphplay::gfx::System::initUniformBuffers() {
 void vgraphplay::gfx::System::initDescriptorSetLayout() {
     assert(m_device != nullptr);
 
-    vk::DescriptorSetLayoutBinding dsl_lb{
-        .binding = 0,
-        .descriptorType = vk::DescriptorType::eUniformBuffer,
-        .descriptorCount = 1,
-        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+    std::array<vk::DescriptorSetLayoutBinding, 2> dsl_lbs{
+        vk::DescriptorSetLayoutBinding{
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eUniformBuffer,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eVertex,
+        },
+        vk::DescriptorSetLayoutBinding{
+            .binding = 1,
+            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment,
+        },
     };
 
-    vk::DescriptorSetLayoutCreateInfo dsl_ci = vk::DescriptorSetLayoutCreateInfo{}.setBindings(dsl_lb);
+    vk::DescriptorSetLayoutCreateInfo dsl_ci = vk::DescriptorSetLayoutCreateInfo{}.setBindings(dsl_lbs);
     m_descriptor_set_layout = m_device.createDescriptorSetLayout(dsl_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created descriptor set layout: " << *m_descriptor_set_layout;
 }
 
 void vgraphplay::gfx::System::initDescriptorPool() {
-    vk::DescriptorPoolSize dp_sz{
-        .type = vk::DescriptorType::eUniformBuffer,
-        .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+    std::array<vk::DescriptorPoolSize, 2> dp_szs{
+        vk::DescriptorPoolSize{
+            .type = vk::DescriptorType::eUniformBuffer,
+            .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+        },
+        vk::DescriptorPoolSize{
+            .type = vk::DescriptorType::eCombinedImageSampler,
+            .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+        },
     };
     vk::DescriptorPoolCreateInfo dp_ci = vk::DescriptorPoolCreateInfo{
         .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
         .maxSets = MAX_FRAMES_IN_FLIGHT,
-    }.setPoolSizes(dp_sz);
+    }.setPoolSizes(dp_szs);
     m_descriptor_pool = m_device.createDescriptorPool(dp_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created descriptor pool: " << *m_descriptor_pool;
 }
@@ -644,19 +663,34 @@ void vgraphplay::gfx::System::initDescriptorSets() {
             .offset = 0,
             .range = sizeof(Transformations),
         };
-        vk::WriteDescriptorSet ds_write = vk::WriteDescriptorSet{
-            .dstSet = *m_descriptor_sets[i],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorType = vk::DescriptorType::eUniformBuffer,
-        }.setBufferInfo(buffer_info);
-        m_device.updateDescriptorSets(ds_write, {});
+        vk::DescriptorImageInfo image_info{
+            .sampler = m_texture_sampler,
+            .imageView = *m_texture_image_view,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+        };
+        std::array<vk::WriteDescriptorSet, 2> ds_writes{
+            vk::WriteDescriptorSet{
+                .dstSet = *m_descriptor_sets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorType = vk::DescriptorType::eUniformBuffer,
+            },
+            vk::WriteDescriptorSet{
+                .dstSet = *m_descriptor_sets[i],
+                .dstBinding = 1,
+                .dstArrayElement = 0,
+                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+            },
+        };
+        ds_writes[0].setBufferInfo(buffer_info);
+        ds_writes[1].setImageInfo(image_info);
+        m_device.updateDescriptorSets(ds_writes, {});
     }
 }
 
 void vgraphplay::gfx::System::initPipeline() {
     assert(m_device != nullptr);
-    
+
     vk::ShaderModuleCreateInfo sm_ci = vk::ShaderModuleCreateInfo{
         // This sizeof() is a very verbose way to say 1...
         .codeSize = UNLIT_BYTECODE.size() * sizeof(std::remove_reference<decltype(UNLIT_BYTECODE)>::type::value_type),
@@ -679,7 +713,7 @@ void vgraphplay::gfx::System::initPipeline() {
     };
 
     vk::VertexInputBindingDescription vertex_binding_info = Vertex::bindingDescription();
-    std::array<vk::VertexInputAttributeDescription, 2> vertex_attribute_info = Vertex::attributeDescription();
+    std::array<vk::VertexInputAttributeDescription, 3> vertex_attribute_info = Vertex::attributeDescription();
     vk::PipelineVertexInputStateCreateInfo vertex_input_ci = vk::PipelineVertexInputStateCreateInfo{}
         .setVertexBindingDescriptions(vertex_binding_info)
         .setVertexAttributeDescriptions(vertex_attribute_info);
@@ -714,7 +748,7 @@ void vgraphplay::gfx::System::initPipeline() {
     };
     vk::PipelineColorBlendStateCreateInfo color_blend_ci = vk::PipelineColorBlendStateCreateInfo{
         .logicOpEnable = vk::False,
-        .logicOp = vk::LogicOp::eCopy,        
+        .logicOp = vk::LogicOp::eCopy,
     }.setAttachments(blend_attachment);
 
     std::array<vk::DynamicState, 2> dynamic_states{
@@ -798,13 +832,13 @@ void vgraphplay::gfx::System::updateUniformBuffer(uint32_t frame_index) {
 
     Transformations xforms;
     xforms.model = glm::rotate(
-        glm::mat4(1.0f), 
-        time * glm::radians(90.0f), 
+        glm::mat4(1.0f),
+        time * glm::radians(90.0f),
         glm::vec3(0.0f, 0.0f, 1.0f)
     );
     xforms.view = glm::lookAt(
-        glm::vec3(2.0f, 2.0f, 2.0f), 
-        glm::vec3(0.0f, 0.0f, 0.0f), 
+        glm::vec3(2.0f, 2.0f, 2.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(0.0f, 0.0f, 1.0f)
     );
     xforms.projection = glm::perspective(
@@ -821,7 +855,7 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
     vk::raii::CommandBuffer &command_buffer = m_command_buffers[m_frame_index];
 
     command_buffer.begin({});
-    
+
     // Transition the image to the color attachment layout.
     transitionImageLayout(
         command_buffer,
@@ -852,7 +886,7 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
     // Render.
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
     command_buffer.bindVertexBuffers(0, *m_vertex_buffer, {0});
-    command_buffer.bindIndexBuffer(*m_index_buffer, {0}, vk::IndexType::eUint32);
+    command_buffer.bindIndexBuffer(*m_index_buffer, 0, vk::IndexType::eUint32);
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline_layout, 0, *m_descriptor_sets[m_frame_index], nullptr);
     command_buffer.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(m_swapchain_extent.width), static_cast<float>(m_swapchain_extent.height)});
     command_buffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, m_swapchain_extent});
@@ -889,7 +923,7 @@ vk::raii::CommandBuffer vgraphplay::gfx::System::beginOneTimeCommands() {
     };
     cb.begin(cb_bi);
 
-    return std::move(cb);    
+    return std::move(cb);
 }
 
 void vgraphplay::gfx::System::endOneTimeCommands(vk::raii::CommandBuffer &&commands) {
@@ -897,11 +931,11 @@ void vgraphplay::gfx::System::endOneTimeCommands(vk::raii::CommandBuffer &&comma
     vk::SubmitInfo si = vk::SubmitInfo{}.setCommandBuffers(*commands);
     m_command_queue.submit(si, nullptr);
     m_command_queue.waitIdle();
-} 
+}
 
 void vgraphplay::gfx::System::initSynchronizationObjects() {
     assert(m_device != nullptr);
-    
+
     for (size_t i = 0; i < m_swapchain_image_count; ++i) {
         m_render_finished_semaphores.emplace_back(m_device, vk::SemaphoreCreateInfo{});
         BOOST_LOG_TRIVIAL(trace) << "Created semaphore (render finished) for image " << i << ": " << *m_render_finished_semaphores.back();
@@ -949,8 +983,8 @@ std::pair<vk::raii::Image, vk::raii::DeviceMemory> vgraphplay::gfx::System::crea
 }
 
 vk::raii::ImageView vgraphplay::gfx::System::createImageView(
-    const vk::Image image, 
-    vk::Format format, 
+    const vk::Image image,
+    vk::Format format,
     vk::ImageAspectFlags aspect_mask
 ) {
     vk::ImageViewCreateInfo imgv_ci{
@@ -969,7 +1003,7 @@ vk::raii::ImageView vgraphplay::gfx::System::createImageView(
     vk::raii::ImageView rv = m_device.createImageView(imgv_ci);
     BOOST_LOG_TRIVIAL(trace) << "Created image view: " << *rv << " image " << image;
     return rv;
-} 
+}
 
 void vgraphplay::gfx::System::transitionImageLayout(
     vk::raii::CommandBuffer &command_buffer,
@@ -1130,8 +1164,8 @@ void vgraphplay::gfx::System::drawFrame() {
     }
 
     auto [result2, image_index] = m_swapchain.acquireNextImage(
-        UINT64_MAX, 
-        *present_complete, 
+        UINT64_MAX,
+        *present_complete,
         nullptr
     );
     if (result2 == vk::Result::eErrorOutOfDateKHR) {
@@ -1143,7 +1177,7 @@ void vgraphplay::gfx::System::drawFrame() {
 
     m_device.resetFences(*draw_fence);
     updateUniformBuffer(m_frame_index);
-    
+
     vk::raii::Semaphore &render_finished = m_render_finished_semaphores[image_index];
     recordRenderInCommandBuffer(image_index);
 
@@ -1328,12 +1362,12 @@ std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, boo
 
 uint32_t chooseMemoryTypeIndex(vk::raii::PhysicalDevice &physical_device, uint32_t type_filter, vk::MemoryPropertyFlags properties) {
     vk::PhysicalDeviceMemoryProperties mem_props = physical_device.getMemoryProperties();
-    
+
     for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
         if (type_filter & (1 << i) &&
             (mem_props.memoryTypes[i].propertyFlags & properties) == properties)
         {
-            return i;            
+            return i;
         }
     }
 

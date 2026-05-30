@@ -18,10 +18,10 @@ namespace vgraphplay {
         struct Vertex {
             glm::vec2 pos;
             glm::vec3 color;
-            // glm::vec2 tex;
+            glm::vec2 tex;
 
             static vk::VertexInputBindingDescription bindingDescription();
-            static std::array<vk::VertexInputAttributeDescription, 2> attributeDescription();
+            static std::array<vk::VertexInputAttributeDescription, 3> attributeDescription();
         };
 
         struct Transformations {
@@ -33,7 +33,7 @@ namespace vgraphplay {
         class System {
         public:
             static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-            
+
             System(GLFWwindow *window, bool debug);
             ~System();
 
@@ -53,7 +53,7 @@ namespace vgraphplay {
             void initDescriptorPool();
             void initDescriptorSets();
             void initPipeline();
-            
+
             void initVertexBuffer();
             void initIndexBuffer();
             void initUniformBuffers();
@@ -64,15 +64,15 @@ namespace vgraphplay {
 
             void initCommandPool();
             void initCommandBuffer();
-            
+
             void initSynchronizationObjects();
 
             void updateUniformBuffer(uint32_t image_index);
             void recordRenderInCommandBuffer(uint32_t image_index);
 
             std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
-                vk::DeviceSize size, 
-                vk::BufferUsageFlags usage, 
+                vk::DeviceSize size,
+                vk::BufferUsageFlags usage,
                 vk::MemoryPropertyFlags properties,
                 std::optional<const char *> name = std::nullopt
             );
@@ -86,8 +86,8 @@ namespace vgraphplay {
                 vk::MemoryPropertyFlags properties
             );
             vk::raii::ImageView createImageView(
-                const vk::Image image, 
-                vk::Format format, 
+                const vk::Image image,
+                vk::Format format,
                 vk::ImageAspectFlags aspect_mask
             );
             void transitionImageLayout(
@@ -96,7 +96,7 @@ namespace vgraphplay {
                 vk::ImageLayout old_layout,
                 vk::ImageLayout new_layout,
                 vk::AccessFlags2 src_access_mask,
-                vk::AccessFlags2 dst_access_mask, 
+                vk::AccessFlags2 dst_access_mask,
                 vk::PipelineStageFlags2 src_stage_mask,
                 vk::PipelineStageFlags2 dst_stage_mask
             );
@@ -110,7 +110,7 @@ namespace vgraphplay {
 
             vk::raii::CommandBuffer beginOneTimeCommands();
             void endOneTimeCommands(vk::raii::CommandBuffer &&commands);
-            
+
             /* bool initDepthResources();
             void cleanupDepthResources();
             VkFormat chooseDepthFormat(); */
@@ -162,7 +162,7 @@ namespace vgraphplay {
             vk::raii::DescriptorSetLayout m_descriptor_set_layout;
             vk::raii::DescriptorPool m_descriptor_pool;
             std::vector<vk::raii::DescriptorSet> m_descriptor_sets;
-            
+
             // Synchronization objects.
             std::vector<vk::raii::Semaphore> m_present_complete_semaphores;
             std::vector<vk::raii::Semaphore> m_render_finished_semaphores;

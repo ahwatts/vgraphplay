@@ -41,8 +41,8 @@ if(ENABLE_CPP20_MODULE)
   add_library(Vulkan::cppm ALIAS VulkanCppModule)
 
   target_compile_definitions(VulkanCppModule
-    PUBLIC 
-    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 
+    PUBLIC
+    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1)
   target_include_directories(VulkanCppModule PUBLIC "${Vulkan_INCLUDE_DIR}")
   target_link_libraries(VulkanCppModule PUBLIC Vulkan::Vulkan)
@@ -57,7 +57,7 @@ if(ENABLE_CPP20_MODULE)
       /Zc:__cplusplus     # Enable correct __cplusplus macro
       /EHsc               # Enable C++ exception handling
       /Zc:preprocessor    # Use conforming preprocessor
-      /translateInclude)  # Automatically translate #include to import for standard library    
+      /translateInclude)  # Automatically translate #include to import for standard library
   endif()
 
   target_sources(VulkanCppModule
@@ -80,8 +80,8 @@ else()
   add_library(Vulkan::cppm ALIAS VulkanCppModule)
   target_link_libraries(VulkanCppModule INTERFACE Vulkan::Vulkan)
   target_compile_definitions(VulkanCppModule
-    INTERFACE 
-    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 
+    INTERFACE
+    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1)
 endif()
 

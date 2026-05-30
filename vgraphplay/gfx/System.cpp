@@ -22,7 +22,7 @@ bool hasLayer(std::vector<vk::LayerProperties> &all_layers, const char *layer_na
 std::vector<const char *> buildInstanceExtensionList(vk::raii::Context &context, bool debug);
 std::vector<const char *> buildInstanceLayerList(vk::raii::Context &context, bool debug);
 
-vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */);
+vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices);
 vk::SurfaceFormatKHR chooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR> &available_formats);
 vk::PresentModeKHR chooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR> &available_modes);
 vk::Extent2D chooseSwapchainExtent(GLFWwindow *window, const vk::SurfaceCapabilitiesKHR &caps);
@@ -257,7 +257,7 @@ void vgraphplay::gfx::System::initDebugMessenger() {
     BOOST_LOG_TRIVIAL(trace) << "Created debug messenger: " << *m_debug_messenger;
 }
 
-vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices /*, vk::SurfaceKHR &surface */) {
+vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::PhysicalDevice> &devices) {
     std::vector<const char *> required_extensions{
         vk::KHRSwapchainExtensionName,
     };
@@ -360,7 +360,7 @@ void vgraphplay::gfx::System::initDevice() {
             },
         },
         vk::PhysicalDeviceVulkan11Features{
-            /*.shaderDrawParameters = true*/ // Enable shader draw parameters (we need this for SV_VertexID in the shader)
+            // .shaderDrawParameters = true, // Enable shader draw parameters (we need this for SV_VertexID in the shader)
         },
         vk::PhysicalDeviceVulkan13Features{
             .synchronization2 = true, // Support new synchronization commands
@@ -1297,10 +1297,6 @@ void vgraphplay::gfx::System::drawFrame() {
 void vgraphplay::gfx::System::setFramebufferResized() {
     m_framebuffer_resized = true;
 }
-
-/* bool vgraphplay::gfx::System::hasStencilComponent(VkFormat format) {
-    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
-} */
 
 bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name) {
     return std::ranges::any_of(

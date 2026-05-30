@@ -57,14 +57,20 @@ const std::vector<unsigned char> &WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
 // };
 
 const std::vector<vgraphplay::gfx::Vertex> RECTANGLE_VERTICES = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 };
 
 const std::vector<uint32_t> RECTANGLE_INDICES = {
     0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4,
 };
 
 vk::VertexInputBindingDescription vgraphplay::gfx::Vertex::bindingDescription() {
@@ -80,7 +86,7 @@ std::array<vk::VertexInputAttributeDescription, 3> vgraphplay::gfx::Vertex::attr
         vk::VertexInputAttributeDescription{
             .location = 0,
             .binding = 0,
-            .format = vk::Format::eR32G32Sfloat,
+            .format = vk::Format::eR32G32B32Sfloat,
             .offset = offsetof(Vertex, pos),
         },
         vk::VertexInputAttributeDescription{
@@ -152,6 +158,10 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_swapchain_images{},
       m_swapchain_image_views{},
       m_framebuffer_resized{false},
+      m_depth_image{nullptr},
+      m_depth_format(vk::Format::eUndefined),
+      m_depth_image_memory{nullptr},
+      m_depth_image_view{nullptr},
       m_pipeline_layout{nullptr},
       m_pipeline{nullptr},
       m_descriptor_set_layout{nullptr},
@@ -160,9 +170,6 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_present_complete_semaphores{},
       m_render_finished_semaphores{},
       m_draw_fences{}
-    //   m_depth_image{VK_NULL_HANDLE},
-    //   m_depth_image_memory{VK_NULL_HANDLE},
-    //   m_depth_image_view{VK_NULL_HANDLE},
 {
     initInstance();
     initDebugMessenger();
@@ -170,11 +177,12 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initDevice();
     initSwapchain();
     initSynchronizationObjects();
-    initDescriptorSetLayout();
-    initPipeline();
     initCommandPool();
     initCommandBuffer();
+    initDescriptorSetLayout();
     initDescriptorPool();
+    initDepthResources();
+    initPipeline();
     initVertexBuffer();
     initIndexBuffer();
     initUniformBuffers();
@@ -492,7 +500,11 @@ void vgraphplay::gfx::System::recreateSwapchain() {
     m_swapchain_image_views.clear();
     m_swapchain_images.clear();
     m_swapchain = nullptr;
+    m_depth_image = nullptr;
+    m_depth_image_memory = nullptr;
+    m_depth_image_view = nullptr;
     initSwapchain();
+    initDepthResources();
 }
 
 std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::createBuffer(
@@ -746,6 +758,15 @@ void vgraphplay::gfx::System::initPipeline() {
         .blendEnable = vk::False,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
     };
+
+    vk::PipelineDepthStencilStateCreateInfo depth_ci{
+        .depthTestEnable = vk::True,
+        .depthWriteEnable = vk::True,
+        .depthCompareOp = vk::CompareOp::eLess,
+        .depthBoundsTestEnable = vk::False,
+        .stencilTestEnable = vk::False,
+    };
+
     vk::PipelineColorBlendStateCreateInfo color_blend_ci = vk::PipelineColorBlendStateCreateInfo{
         .logicOpEnable = vk::False,
         .logicOp = vk::LogicOp::eCopy,
@@ -765,21 +786,25 @@ void vgraphplay::gfx::System::initPipeline() {
     BOOST_LOG_TRIVIAL(trace) << "Created pipeline layout: " << *m_pipeline_layout;
 
     vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipeline_ci{
-        {
+        vk::GraphicsPipelineCreateInfo{
             .pVertexInputState = &vertex_input_ci,
             .pInputAssemblyState = &input_assembly_ci,
             .pViewportState = &viewport_ci,
             .pRasterizationState = &raster_ci,
             .pMultisampleState = &multisample_state_ci,
+            .pDepthStencilState = &depth_ci,
             .pColorBlendState = &color_blend_ci,
             .pDynamicState = &dynamic_state_ci,
             .layout = m_pipeline_layout,
             .renderPass = nullptr,
         },
-        {},
+        vk::PipelineRenderingCreateInfo{
+            .depthAttachmentFormat = m_depth_format,
+        },
     };
     pipeline_ci.get<vk::GraphicsPipelineCreateInfo>().setStages(shader_stages);
-    pipeline_ci.get<vk::PipelineRenderingCreateInfo>().setColorAttachmentFormats(m_swapchain_format.format);
+    pipeline_ci.get<vk::PipelineRenderingCreateInfo>()
+        .setColorAttachmentFormats(m_swapchain_format.format);
 
     m_pipeline = m_device.createGraphicsPipeline(nullptr, pipeline_ci.get<vk::GraphicsPipelineCreateInfo>());
     BOOST_LOG_TRIVIAL(trace) << "Created graphics pipeline: " << *m_pipeline;
@@ -865,11 +890,13 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
         {},
         vk::AccessFlagBits2::eColorAttachmentWrite,
         vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::ImageAspectFlagBits::eColor
     );
 
     // Start the rendering to the color attachment.
-    vk::ClearValue clear_color = vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
+    vk::ClearValue clear_color = vk::ClearColorValue{0.5f, 0.5f, 0.5f, 1.0f};
+    vk::ClearValue clear_depth = vk::ClearDepthStencilValue{1.0f, 0};
     vk::RenderingAttachmentInfo rai{
         .imageView = m_swapchain_image_views[image_index],
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -877,9 +904,17 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
         .storeOp = vk::AttachmentStoreOp::eStore,
         .clearValue = clear_color,
     };
+    vk::RenderingAttachmentInfo dai{
+        .imageView = m_depth_image_view,
+        .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .clearValue = clear_depth,
+    };
     vk::RenderingInfo ri = vk::RenderingInfo{
         .renderArea = {.offset = {0, 0}, .extent = m_swapchain_extent},
         .layerCount = 1,
+        .pDepthAttachment = &dai,
     }.setColorAttachments(rai);
     command_buffer.beginRendering(ri);
 
@@ -904,7 +939,8 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
         vk::AccessFlagBits2::eColorAttachmentWrite,
         {},
         vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::PipelineStageFlagBits2::eBottomOfPipe
+        vk::PipelineStageFlagBits2::eBottomOfPipe,
+        vk::ImageAspectFlagBits::eColor
     );
 
     command_buffer.end();
@@ -1013,7 +1049,8 @@ void vgraphplay::gfx::System::transitionImageLayout(
     vk::AccessFlags2 src_access_mask,
     vk::AccessFlags2 dst_access_mask,
     vk::PipelineStageFlags2 src_stage_mask,
-    vk::PipelineStageFlags2 dst_stage_mask
+    vk::PipelineStageFlags2 dst_stage_mask,
+    vk::ImageAspectFlags aspect_mask
 ) {
     vk::ImageMemoryBarrier2 barrier{
         .srcStageMask = src_stage_mask,
@@ -1026,7 +1063,7 @@ void vgraphplay::gfx::System::transitionImageLayout(
         .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
         .image = image,
         .subresourceRange = {
-            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .aspectMask = aspect_mask,
             .baseMipLevel = 0,
             .levelCount = 1,
             .baseArrayLayer = 0,
@@ -1105,7 +1142,8 @@ void vgraphplay::gfx::System::initTextureImage() {
         {},
         vk::AccessFlagBits2::eTransferWrite,
         vk::PipelineStageFlagBits2::eTopOfPipe,
-        vk::PipelineStageFlagBits2::eTransfer
+        vk::PipelineStageFlagBits2::eTransfer,
+        vk::ImageAspectFlagBits::eColor
     );
     copyBufferToImage(cmds, *staging_buffer, *m_texture_image, tex_width, tex_height);
     transitionImageLayout(
@@ -1116,7 +1154,8 @@ void vgraphplay::gfx::System::initTextureImage() {
         vk::AccessFlagBits2::eTransferWrite,
         vk::AccessFlagBits2::eShaderRead,
         vk::PipelineStageFlagBits2::eTransfer,
-        vk::PipelineStageFlagBits2::eFragmentShader
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::ImageAspectFlagBits::eColor
     );
     endOneTimeCommands(std::move(cmds));
 }
@@ -1153,6 +1192,56 @@ void vgraphplay::gfx::System::initTextureSampler() {
     BOOST_LOG_TRIVIAL(trace) << "Created texture sampler: " << *m_texture_sampler;
 }
 
+vk::Format vgraphplay::gfx::System::chooseFormat(
+    const std::vector<vk::Format> &candidates,
+    vk::ImageTiling tiling,
+    vk::FormatFeatureFlags features
+) {
+    for (auto &format : candidates) {
+        vk::FormatProperties props = m_physical_device.getFormatProperties(format);
+        if (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features)) {
+            return format;
+        } else if (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features)) {
+            return format;
+        }
+    }
+
+    return vk::Format::eUndefined;
+}
+
+void vgraphplay::gfx::System::initDepthResources() {
+    m_depth_format = chooseFormat(
+        {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint},
+        vk::ImageTiling::eOptimal,
+        vk::FormatFeatureFlagBits::eDepthStencilAttachment
+    );
+
+    std::tie(m_depth_image, m_depth_image_memory) = createImage(
+        m_swapchain_extent.width,
+        m_swapchain_extent.height,
+        m_depth_format,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eDepthStencilAttachment,
+        vk::MemoryPropertyFlagBits::eDeviceLocal
+    );
+
+    m_depth_image_view = createImageView(*m_depth_image, m_depth_format, vk::ImageAspectFlagBits::eDepth);
+
+    vk::raii::CommandBuffer cmds = beginOneTimeCommands();
+    transitionImageLayout(
+        cmds,
+        *m_depth_image,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eDepthAttachmentOptimal,
+        vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+        vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+        vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+        vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+        vk::ImageAspectFlagBits::eDepth
+    );
+    endOneTimeCommands(std::move(cmds));
+}
+
 void vgraphplay::gfx::System::drawFrame() {
     vk::raii::CommandBuffer &command_buffer = m_command_buffers[m_frame_index];
     vk::raii::Semaphore &present_complete = m_present_complete_semaphores[m_frame_index];
@@ -1171,8 +1260,8 @@ void vgraphplay::gfx::System::drawFrame() {
     if (result2 == vk::Result::eErrorOutOfDateKHR) {
         recreateSwapchain();
         return;
-    } else if (result2 != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
-        throw std::runtime_error{"Error acquiring next swapchain image"};
+    } else if (result2 != vk::Result::eSuccess && result2 != vk::Result::eSuboptimalKHR) {
+        throw std::runtime_error("Error acquiring next swapchain image");
     }
 
     m_device.resetFences(*draw_fence);
@@ -1209,84 +1298,7 @@ void vgraphplay::gfx::System::setFramebufferResized() {
     m_framebuffer_resized = true;
 }
 
-/* bool vgraphplay::gfx::System::initDepthResources() {
-    VkFormat depth_format = chooseDepthFormat();
-    bool brslt = createImage(m_swapchain_extent.width, m_swapchain_extent.height,
-                depth_format,
-                VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                m_depth_image, m_depth_image_memory);
-    if (brslt) {
-        BOOST_LOG_TRIVIAL(trace) << "Created depth image: " << m_depth_image << " and memory: " << m_depth_image_memory;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating depth image";
-        return false;
-    }
-
-    m_depth_image_view = createImageView(m_depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
-    if (m_depth_image_view == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Error creating depth image view";
-        return false;
-    } else {
-        BOOST_LOG_TRIVIAL(trace) << "Created depth image view: " << m_depth_image_view;
-    }
-
-    transitionImageLayout(m_depth_image, depth_format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupDepthResources() {
-    if (m_device != VK_NULL_HANDLE) {
-        if (m_depth_image_view != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Destroying depth image view: " << m_depth_image_view;
-            vkDestroyImageView(m_device, m_depth_image_view, nullptr);
-            m_depth_image_view = VK_NULL_HANDLE;
-        }
-
-        if (m_depth_image != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Destroying depth image: " << m_depth_image;
-            vkDestroyImage(m_device, m_depth_image, nullptr);
-            m_depth_image = VK_NULL_HANDLE;
-        }
-
-        if (m_depth_image_memory != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Freeing depth image memory: " << m_depth_image_memory;
-            vkFreeMemory(m_device, m_depth_image_memory, nullptr);
-            m_depth_image_memory = VK_NULL_HANDLE;
-        }
-    }
-}
-
-VkFormat vgraphplay::gfx::System::chooseDepthFormat() {
-    std::array<VkFormat, 3> candidates{
-        VK_FORMAT_D32_SFLOAT,
-        VK_FORMAT_D32_SFLOAT_S8_UINT,
-        VK_FORMAT_D24_UNORM_S8_UINT,
-    };
-    return chooseFormat(candidates.data(), candidates.size(),
-                        VK_IMAGE_TILING_OPTIMAL,
-                        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-}
-
-VkFormat vgraphplay::gfx::System::chooseFormat(const VkFormat *candidates, int num_candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-    for (int i = 0; i < num_candidates; ++i) {
-        const VkFormat &format = candidates[i];
-        VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(m_physical_device, format, &props);
-
-        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
-            return format;
-        } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
-            return format;
-        }
-    }
-
-    return VK_FORMAT_UNDEFINED;
-}
-
-bool vgraphplay::gfx::System::hasStencilComponent(VkFormat format) {
+/* bool vgraphplay::gfx::System::hasStencilComponent(VkFormat format) {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 } */
 

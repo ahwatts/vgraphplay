@@ -5,7 +5,7 @@ struct Transformations {
 }
 
 struct VertexInput {
-    float2 position;
+    float3 position;
     float3 color;
     float2 tex;
 }
@@ -21,7 +21,7 @@ ConstantBuffer<Transformations> xforms;
 [shader("vertex")]
 VertexOutput vs_main(VertexInput in) {
     VertexOutput out;
-    out.position = mul(xforms.projection, mul(xforms.view, mul(xforms.model, float4(in.position, 0.0, 1.0))));
+    out.position = mul(xforms.projection, mul(xforms.view, mul(xforms.model, float4(in.position, 1.0))));
     out.color = in.color;
     out.tex = in.tex;
     return out;

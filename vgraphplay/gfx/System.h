@@ -16,7 +16,7 @@
 namespace vgraphplay {
     namespace gfx {
         struct Vertex {
-            glm::vec2 pos;
+            glm::vec3 pos;
             glm::vec3 color;
             glm::vec2 tex;
 
@@ -65,6 +65,8 @@ namespace vgraphplay {
             void initCommandPool();
             void initCommandBuffer();
 
+            void initDepthResources();
+
             void initSynchronizationObjects();
 
             void updateUniformBuffer(uint32_t image_index);
@@ -98,7 +100,8 @@ namespace vgraphplay {
                 vk::AccessFlags2 src_access_mask,
                 vk::AccessFlags2 dst_access_mask,
                 vk::PipelineStageFlags2 src_stage_mask,
-                vk::PipelineStageFlags2 dst_stage_mask
+                vk::PipelineStageFlags2 dst_stage_mask,
+                vk::ImageAspectFlags aspect_mask
             );
             void copyBufferToImage(
                 vk::raii::CommandBuffer &command_buffer,
@@ -111,9 +114,7 @@ namespace vgraphplay {
             vk::raii::CommandBuffer beginOneTimeCommands();
             void endOneTimeCommands(vk::raii::CommandBuffer &&commands);
 
-            /* bool initDepthResources();
-            void cleanupDepthResources();
-            VkFormat chooseDepthFormat(); */
+            vk::Format chooseFormat(const std::vector<vk::Format> &candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
 
             bool m_debug;
             GLFWwindow *m_window;
@@ -152,9 +153,10 @@ namespace vgraphplay {
             std::vector<vk::Image> m_swapchain_images;
             std::vector<vk::raii::ImageView> m_swapchain_image_views;
             bool m_framebuffer_resized;
-            // VkImage m_depth_image;
-            // VkDeviceMemory m_depth_image_memory;
-            // VkImageView m_depth_image_view;
+            vk::raii::Image m_depth_image;
+            vk::Format m_depth_format;
+            vk::raii::DeviceMemory m_depth_image_memory;
+            vk::raii::ImageView m_depth_image_view;
 
             // Pipeline-related structures.
             vk::raii::PipelineLayout m_pipeline_layout;

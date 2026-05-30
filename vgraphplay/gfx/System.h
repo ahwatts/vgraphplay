@@ -59,6 +59,8 @@ namespace vgraphplay {
             void initUniformBuffers();
 
             void initTextureImage();
+            void initTextureImageView();
+            void initTextureSampler();
 
             void initCommandPool();
             void initCommandBuffer();
@@ -83,6 +85,11 @@ namespace vgraphplay {
                 vk::ImageUsageFlags usage,
                 vk::MemoryPropertyFlags properties
             );
+            vk::raii::ImageView createImageView(
+                const vk::Image image, 
+                vk::Format format, 
+                vk::ImageAspectFlags aspect_mask
+            );
             void transitionImageLayout(
                 vk::raii::CommandBuffer &command_buffer,
                 const vk::Image &image,
@@ -104,18 +111,9 @@ namespace vgraphplay {
             vk::raii::CommandBuffer beginOneTimeCommands();
             void endOneTimeCommands(vk::raii::CommandBuffer &&commands);
             
-            /* bool initTextureImageView();
-            bool initTextureSampler();
-            void cleanupTextureImage();
-            void cleanupTextureImageView();
-            void cleanupTextureSampler();
-
-            bool initDepthResources();
+            /* bool initDepthResources();
             void cleanupDepthResources();
-            VkFormat chooseDepthFormat();
-
-            bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
-            VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags); */
+            VkFormat chooseDepthFormat(); */
 
             bool m_debug;
             GLFWwindow *m_window;
@@ -142,8 +140,8 @@ namespace vgraphplay {
             std::vector<void *> m_uniform_buffers_mapped;
             vk::raii::Image m_texture_image;
             vk::raii::DeviceMemory m_texture_image_memory;
-            // VkImageView m_texture_image_view;
-            // VkSampler m_texture_sampler;
+            vk::raii::ImageView m_texture_image_view;
+            vk::raii::Sampler m_texture_sampler;
 
             // Presentation-related structures.
             vk::raii::SurfaceKHR m_surface;

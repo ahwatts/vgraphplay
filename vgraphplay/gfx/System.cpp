@@ -134,6 +134,10 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_index_buffer_memory{nullptr},
       m_uniform_buffers_memory{},
       m_uniform_buffers_mapped{},
+      m_texture_image{nullptr},
+      m_texture_image_memory{nullptr},
+      m_texture_image_view{nullptr},
+      m_texture_sampler{nullptr},
       m_surface{nullptr},
       m_swapchain_format{},
       m_swapchain_extent{0, 0},
@@ -149,10 +153,7 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_descriptor_sets{},
       m_present_complete_semaphores{},
       m_render_finished_semaphores{},
-      m_draw_fences{},
-      m_texture_image{nullptr},
-      m_texture_image_memory{nullptr}
-    //   m_texture_image_view{VK_NULL_HANDLE},
+      m_draw_fences{}
     //   m_texture_sampler{VK_NULL_HANDLE},
     //   m_depth_image{VK_NULL_HANDLE},
     //   m_depth_image_memory{VK_NULL_HANDLE},
@@ -173,6 +174,8 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
     initIndexBuffer();
     initUniformBuffers();
     initTextureImage();
+    initTextureImageView();
+    initTextureSampler();
     initDescriptorSets();
 }
 
@@ -252,20 +255,15 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
 
     for (auto &dev : devices) {
         const vk::PhysicalDeviceProperties props = dev.getProperties();
-        const auto features = dev.template getFeatures2<
-            vk::PhysicalDeviceFeatures2,
-            vk::PhysicalDeviceVulkan11Features,
-            vk::PhysicalDeviceVulkan13Features, 
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
-        >();
-        const std::vector<vk::ExtensionProperties> all_extensions = dev.enumerateDeviceExtensionProperties();
-        const std::vector<vk::QueueFamilyProperties> queue_families = dev.getQueueFamilyProperties();
-
         bool supports_vulkan_13 = props.apiVersion >= vk::ApiVersion13;
+
+        const std::vector<vk::QueueFamilyProperties> queue_families = dev.getQueueFamilyProperties();
         bool supports_graphics = std::ranges::any_of(
             queue_families,
             [](const auto &qfp) { return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics); }
         );
+
+        const std::vector<vk::ExtensionProperties> all_extensions = dev.enumerateDeviceExtensionProperties();
         bool supports_all_extensions = std::ranges::all_of(
             required_extensions,
             [&all_extensions](const auto &this_req_ext) {
@@ -277,16 +275,23 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
                 );
             }
         );
-        bool supports_dynamic_rendering = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering;
-        bool supports_dynamic_state = features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
-        bool supports_draw_parameters = features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters;
+
+        const auto features = dev.getFeatures2<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan11Features,
+            vk::PhysicalDeviceVulkan13Features, 
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+        >();
+        bool supports_required_features =
+            features.get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
+            features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
+            features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+            features.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
         if (supports_vulkan_13 && 
             supports_graphics && 
             supports_all_extensions && 
-            supports_dynamic_rendering && 
-            supports_dynamic_state && 
-            supports_draw_parameters)
+            supports_required_features)
         {
             return dev;
         }
@@ -336,13 +341,21 @@ void vgraphplay::gfx::System::initDevice() {
         vk::PhysicalDeviceVulkan13Features, 
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
     > feature_chain = {
-        {},                             // vk::PhysicalDeviceFeatures2, empty (for now)
-        {/*.shaderDrawParameters = true*/}, // Enable shader draw parameters (we need this for SV_VertexID in the shader)
-        {
-            .synchronization2 = true,   // Support new synchronization commands
-            .dynamicRendering = true,   // Enable dynamic rendering from Vulkan 1.3
+        vk::PhysicalDeviceFeatures2{
+            .features = vk::PhysicalDeviceFeatures{
+                .samplerAnisotropy = true, // Enable ansiotropic filtering in samplers
+            },
+        },
+        vk::PhysicalDeviceVulkan11Features{
+            /*.shaderDrawParameters = true*/ // Enable shader draw parameters (we need this for SV_VertexID in the shader)
+        },
+        vk::PhysicalDeviceVulkan13Features{
+            .synchronization2 = true, // Support new synchronization commands
+            .dynamicRendering = true, // Enable dynamic rendering from Vulkan 1.3
         },     
-        {.extendedDynamicState = true}, // Enable extended dynamic state from the extension
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{
+            .extendedDynamicState = true // Enable extended dynamic state from the extension
+        },
     };
 
     std::vector<const char *> required_device_extensions = {
@@ -453,22 +466,12 @@ void vgraphplay::gfx::System::initSwapchain() {
     m_swapchain_image_count = m_swapchain_images.size();
 
     m_swapchain_image_views.clear();
-    vk::ImageViewCreateInfo imgv_ci{
-        .viewType = vk::ImageViewType::e2D,
-        .format = m_swapchain_format.format,
-        .components = {
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-        },
-        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 },
-    };
-
     for (auto &image : m_swapchain_images) {
-        imgv_ci.image = image;
-        m_swapchain_image_views.emplace_back(m_device, imgv_ci);
-        BOOST_LOG_TRIVIAL(trace) << "Created swapchain image view: " << *m_swapchain_image_views.back() << " for swapchain image " << image;
+        m_swapchain_image_views.push_back(createImageView(
+            image,
+            m_swapchain_format.format,
+            vk::ImageAspectFlagBits::eColor
+        ));
     }
 }
 
@@ -945,6 +948,29 @@ std::pair<vk::raii::Image, vk::raii::DeviceMemory> vgraphplay::gfx::System::crea
     return {std::move(image), std::move(image_memory)};
 }
 
+vk::raii::ImageView vgraphplay::gfx::System::createImageView(
+    const vk::Image image, 
+    vk::Format format, 
+    vk::ImageAspectFlags aspect_mask
+) {
+    vk::ImageViewCreateInfo imgv_ci{
+        .image = image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = format,
+        .components = {
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+        },
+        .subresourceRange = { aspect_mask, 0, 1, 0, 1 },
+    };
+
+    vk::raii::ImageView rv = m_device.createImageView(imgv_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created image view: " << *rv << " image " << image;
+    return rv;
+} 
+
 void vgraphplay::gfx::System::transitionImageLayout(
     vk::raii::CommandBuffer &command_buffer,
     const vk::Image &image,
@@ -1059,6 +1085,38 @@ void vgraphplay::gfx::System::initTextureImage() {
         vk::PipelineStageFlagBits2::eFragmentShader
     );
     endOneTimeCommands(std::move(cmds));
+}
+
+void vgraphplay::gfx::System::initTextureImageView() {
+    m_texture_image_view = createImageView(
+        *m_texture_image,
+        vk::Format::eR8G8B8A8Srgb,
+        vk::ImageAspectFlagBits::eColor
+    );
+}
+
+void vgraphplay::gfx::System::initTextureSampler() {
+    assert(m_device != nullptr);
+
+    vk::PhysicalDeviceProperties props = m_physical_device.getProperties();
+
+    vk::SamplerCreateInfo smp_ci{
+        .magFilter = vk::Filter::eLinear,
+        .minFilter = vk::Filter::eLinear,
+        .mipmapMode = vk::SamplerMipmapMode::eLinear,
+        .addressModeU = vk::SamplerAddressMode::eRepeat,
+        .addressModeV = vk::SamplerAddressMode::eRepeat,
+        .addressModeW = vk::SamplerAddressMode::eRepeat,
+        .anisotropyEnable = vk::True,
+        .maxAnisotropy = props.limits.maxSamplerAnisotropy,
+        .compareEnable = vk::False,
+        .compareOp = vk::CompareOp::eAlways,
+        .borderColor = vk::BorderColor::eIntOpaqueBlack,
+        .unnormalizedCoordinates = vk::False,
+    };
+
+    m_texture_sampler = m_device.createSampler(smp_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created texture sampler: " << *m_texture_sampler;
 }
 
 void vgraphplay::gfx::System::drawFrame() {
@@ -1178,84 +1236,6 @@ VkFormat vgraphplay::gfx::System::chooseDepthFormat() {
                         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
-bool vgraphplay::gfx::System::initTextureImageView() {
-    if (m_texture_image_view != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE || m_texture_image == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Could not create texture image view.";
-        return false;
-    }
-
-    m_texture_image_view = createImageView(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
-    if (m_texture_image_view == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create texture image view";
-        return false;
-    } else {
-        BOOST_LOG_TRIVIAL(trace) << "Created texture image view: " << m_texture_image_view;
-    }
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupTextureImageView() {
-    if (m_device != VK_NULL_HANDLE && m_texture_image_view != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying texture image view: " << m_texture_image_view;
-        vkDestroyImageView(m_device, m_texture_image_view, nullptr);
-        m_texture_image_view = VK_NULL_HANDLE;
-    }
-}
-
-bool vgraphplay::gfx::System::initTextureSampler() {
-    if (m_texture_sampler != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create texture sampler.";
-        return false;
-    }
-
-    VkSamplerCreateInfo smp_ci;
-    smp_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    smp_ci.pNext = nullptr;
-    smp_ci.flags = 0;
-    smp_ci.magFilter = VK_FILTER_LINEAR;
-    smp_ci.minFilter = VK_FILTER_LINEAR;
-    smp_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    smp_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    smp_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    smp_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    smp_ci.mipLodBias = 0.0;
-    smp_ci.anisotropyEnable = VK_TRUE;
-    smp_ci.maxAnisotropy = 16.0;
-    smp_ci.compareEnable = VK_FALSE;
-    smp_ci.compareOp = VK_COMPARE_OP_ALWAYS;
-    smp_ci.minLod = 0.0;
-    smp_ci.maxLod = 0.0;
-    smp_ci.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    smp_ci.unnormalizedCoordinates = VK_FALSE;
-
-    VkResult rslt = vkCreateSampler(m_device, &smp_ci, nullptr, &m_texture_sampler);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created texture sampler: " << m_texture_sampler;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create texture sampler " << rslt;
-        return false;
-    }
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupTextureSampler() {
-    if (m_device != VK_NULL_HANDLE && m_texture_sampler != VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(trace) << "Destroying texture sampler: " << m_texture_sampler;
-        vkDestroySampler(m_device, m_texture_sampler, nullptr);
-        m_texture_sampler = VK_NULL_HANDLE;
-    }
-}
-
 VkFormat vgraphplay::gfx::System::chooseFormat(const VkFormat *candidates, int num_candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
     for (int i = 0; i < num_candidates; ++i) {
         const VkFormat &format = candidates[i];
@@ -1274,36 +1254,6 @@ VkFormat vgraphplay::gfx::System::chooseFormat(const VkFormat *candidates, int n
 
 bool vgraphplay::gfx::System::hasStencilComponent(VkFormat format) {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
-}
-
-VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_mask) {
-    VkImageViewCreateInfo iv_ci;
-    iv_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    iv_ci.pNext = nullptr;
-    iv_ci.flags = 0;
-    iv_ci.image = image;
-    iv_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    iv_ci.format = format;
-    iv_ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    iv_ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-    iv_ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-    iv_ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    iv_ci.subresourceRange.aspectMask = aspect_mask;
-    iv_ci.subresourceRange.baseMipLevel = 0;
-    iv_ci.subresourceRange.levelCount = 1;
-    iv_ci.subresourceRange.baseArrayLayer = 0;
-    iv_ci.subresourceRange.layerCount = 1;
-
-    VkImageView iv_rv;
-    VkResult rslt = vkCreateImageView(m_device, &iv_ci, nullptr, &iv_rv);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created image view: " << iv_rv;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error creating image view " << rslt;
-        return VK_NULL_HANDLE;
-    }
-
-    return iv_rv;
 } */
 
 bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name) {

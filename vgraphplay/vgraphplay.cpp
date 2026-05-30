@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     } catch (const std::exception &e) {
         std::println(stderr, "Error running application: {}", e.what());
     }
-    
+
     glfwTerminate();
     return 0;
 }

@@ -9,8 +9,8 @@
 
 #include <boost/log/trivial.hpp>
 
-// #define STB_IMAGE_IMPLEMENTATION
-// #include <stb_image.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 #include "../glm.h"
 #include "../vulkan.h"
@@ -26,19 +26,7 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
 vk::SurfaceFormatKHR chooseSwapchainSurfaceFormat(const std::vector<vk::SurfaceFormatKHR> &available_formats);
 vk::PresentModeKHR chooseSwapchainPresentMode(const std::vector<vk::PresentModeKHR> &available_modes);
 vk::Extent2D chooseSwapchainExtent(GLFWwindow *window, const vk::SurfaceCapabilitiesKHR &caps);
-
 uint32_t chooseMemoryTypeIndex(vk::raii::PhysicalDevice &physical_device, uint32_t type_filter, vk::MemoryPropertyFlags properties);
-
-void transitionImageLayout(
-    const vk::raii::CommandBuffer &commands,
-    const vk::Image &image,
-    vk::ImageLayout old_layout,
-    vk::ImageLayout new_layout,
-    vk::AccessFlags2 src_access_mask,
-    vk::AccessFlags2 dst_access_mask,
-    vk::PipelineStageFlags2 src_stage_mask,
-    vk::PipelineStageFlags2 dst_stage_mask
-);
 
 const std::vector<unsigned char> &UNLIT_BYTECODE = LOAD_RESOURCE(unlit_slang_spv);
 const std::vector<unsigned char> &WARREN_TEXTURE = LOAD_RESOURCE(warren_jpg);
@@ -161,39 +149,31 @@ vgraphplay::gfx::System::System(GLFWwindow *window, bool debug)
       m_descriptor_sets{},
       m_present_complete_semaphores{},
       m_render_finished_semaphores{},
-      m_draw_fences{}
-    //   m_vertex_buffer{VK_NULL_HANDLE},
-    //   m_index_buffer{VK_NULL_HANDLE},
-    //   m_uniform_buffers{},
-    //   m_vertex_buffer_memory{VK_NULL_HANDLE},
-    //   m_index_buffer_memory{VK_NULL_HANDLE},
-    //   m_uniform_buffers_memory{},
-    //   m_texture_image{VK_NULL_HANDLE},
-    //   m_texture_image_memory{VK_NULL_HANDLE},
+      m_draw_fences{},
+      m_texture_image{nullptr},
+      m_texture_image_memory{nullptr}
     //   m_texture_image_view{VK_NULL_HANDLE},
     //   m_texture_sampler{VK_NULL_HANDLE},
     //   m_depth_image{VK_NULL_HANDLE},
     //   m_depth_image_memory{VK_NULL_HANDLE},
     //   m_depth_image_view{VK_NULL_HANDLE},
-    //   m_descriptor_set_layout{VK_NULL_HANDLE},
-    //   m_descriptor_pool{VK_NULL_HANDLE},
-    //   m_descriptor_sets{},
 {
     initInstance();
     initDebugMessenger();
     initSurface();
     initDevice();
     initSwapchain();
+    initSynchronizationObjects();
     initDescriptorSetLayout();
     initPipeline();
     initCommandPool();
+    initCommandBuffer();
+    initDescriptorPool();
     initVertexBuffer();
     initIndexBuffer();
     initUniformBuffers();
-    initDescriptorPool();
+    initTextureImage();
     initDescriptorSets();
-    initCommandBuffer();
-    initSynchronizationObjects();
 }
 
 vgraphplay::gfx::System::~System() {
@@ -550,20 +530,9 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> vgraphplay::gfx::System::cre
 }
 
 void vgraphplay::gfx::System::copyBuffer(vk::raii::Buffer &src, vk::raii::Buffer &dst, vk::DeviceSize size) {
-    vk::CommandBufferAllocateInfo cb_ai{
-        .commandPool = m_command_pool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1,
-    };
-    vk::raii::CommandBuffer copy_buffer_commands = std::move(m_device.allocateCommandBuffers(cb_ai).front());
-
-    copy_buffer_commands.begin({.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    copy_buffer_commands.copyBuffer(*src, *dst, vk::BufferCopy{0, 0, size});
-    copy_buffer_commands.end();
-
-    vk::SubmitInfo si = vk::SubmitInfo{}.setCommandBuffers(*copy_buffer_commands);
-    m_command_queue.submit(si, nullptr);
-    m_command_queue.waitIdle();
+    vk::raii::CommandBuffer cmds = beginOneTimeCommands();
+    cmds.copyBuffer(*src, *dst, vk::BufferCopy{0, 0, size});
+    endOneTimeCommands(std::move(cmds));
 }
 
 void vgraphplay::gfx::System::initVertexBuffer() {
@@ -818,42 +787,6 @@ void vgraphplay::gfx::System::initCommandBuffer() {
     }
 }
 
-void transitionImageLayout(
-    const vk::raii::CommandBuffer &commands,
-    const vk::Image &image,
-    vk::ImageLayout old_layout,
-    vk::ImageLayout new_layout,
-    vk::AccessFlags2 src_access_mask,
-    vk::AccessFlags2 dst_access_mask,
-    vk::PipelineStageFlags2 src_stage_mask,
-    vk::PipelineStageFlags2 dst_stage_mask
-) {
-    vk::ImageMemoryBarrier2 barrier{
-        .srcStageMask = src_stage_mask,
-        .srcAccessMask = src_access_mask,
-        .dstStageMask = dst_stage_mask,
-        .dstAccessMask = dst_access_mask,
-        .oldLayout = old_layout,
-        .newLayout = new_layout,
-        .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-        .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-        .image = image,
-        .subresourceRange = {
-            .aspectMask = vk::ImageAspectFlagBits::eColor,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-    };
-
-    vk::DependencyInfo dep = vk::DependencyInfo{
-        .dependencyFlags = {},
-    }.setImageMemoryBarriers(barrier);
-
-    commands.pipelineBarrier2(dep);
-}
-
 void vgraphplay::gfx::System::updateUniformBuffer(uint32_t frame_index) {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -888,7 +821,7 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
     
     // Transition the image to the color attachment layout.
     transitionImageLayout(
-        command_buffer, 
+        command_buffer,
         m_swapchain_images[image_index],
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eColorAttachmentOptimal,
@@ -940,11 +873,32 @@ void vgraphplay::gfx::System::recordRenderInCommandBuffer(uint32_t image_index) 
     command_buffer.end();
 }
 
-void vgraphplay::gfx::System::initSynchronizationObjects() {
-    if (m_device == nullptr) {
-        throw std::runtime_error{"Unable to create synchronization objects; device is null"};
-    }
+vk::raii::CommandBuffer vgraphplay::gfx::System::beginOneTimeCommands() {
+    vk::CommandBufferAllocateInfo cb_ai{
+        .commandPool = *m_command_pool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    };
+    vk::raii::CommandBuffer cb = std::move(m_device.allocateCommandBuffers(cb_ai).front());
 
+    vk::CommandBufferBeginInfo cb_bi{
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    };
+    cb.begin(cb_bi);
+
+    return std::move(cb);    
+}
+
+void vgraphplay::gfx::System::endOneTimeCommands(vk::raii::CommandBuffer &&commands) {
+    commands.end();
+    vk::SubmitInfo si = vk::SubmitInfo{}.setCommandBuffers(*commands);
+    m_command_queue.submit(si, nullptr);
+    m_command_queue.waitIdle();
+} 
+
+void vgraphplay::gfx::System::initSynchronizationObjects() {
+    assert(m_device != nullptr);
+    
     for (size_t i = 0; i < m_swapchain_image_count; ++i) {
         m_render_finished_semaphores.emplace_back(m_device, vk::SemaphoreCreateInfo{});
         BOOST_LOG_TRIVIAL(trace) << "Created semaphore (render finished) for image " << i << ": " << *m_render_finished_semaphores.back();
@@ -956,6 +910,155 @@ void vgraphplay::gfx::System::initSynchronizationObjects() {
         m_draw_fences.emplace_back(m_device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
         BOOST_LOG_TRIVIAL(trace) << "Created fence (draw) for frame " << i << ": " << *m_draw_fences.back();
     }
+}
+
+std::pair<vk::raii::Image, vk::raii::DeviceMemory> vgraphplay::gfx::System::createImage(
+    uint32_t width, uint32_t height,
+    vk::Format format,
+    vk::ImageTiling tiling,
+    vk::ImageUsageFlags usage,
+    vk::MemoryPropertyFlags properties
+) {
+    vk::ImageCreateInfo img_ci{
+        .imageType = vk::ImageType::e2D,
+        .format = format,
+        .extent = {.width = width, .height = height, .depth = 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = vk::SampleCountFlagBits::e1,
+        .tiling = tiling,
+        .usage = usage,
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
+    vk::raii::Image image = m_device.createImage(img_ci);
+    BOOST_LOG_TRIVIAL(trace) << "Created image: " << *image;
+
+    vk::MemoryRequirements mem_reqs = image.getMemoryRequirements();
+    vk::MemoryAllocateInfo mem_ai{
+        .allocationSize = mem_reqs.size,
+        .memoryTypeIndex = chooseMemoryTypeIndex(m_physical_device, mem_reqs.memoryTypeBits, properties),
+    };
+    vk::raii::DeviceMemory image_memory = m_device.allocateMemory(mem_ai);
+    BOOST_LOG_TRIVIAL(trace) << "Allocated memory " << *image_memory << " for image: " << *image;
+    image.bindMemory(image_memory, 0);
+
+    return {std::move(image), std::move(image_memory)};
+}
+
+void vgraphplay::gfx::System::transitionImageLayout(
+    vk::raii::CommandBuffer &command_buffer,
+    const vk::Image &image,
+    vk::ImageLayout old_layout,
+    vk::ImageLayout new_layout,
+    vk::AccessFlags2 src_access_mask,
+    vk::AccessFlags2 dst_access_mask,
+    vk::PipelineStageFlags2 src_stage_mask,
+    vk::PipelineStageFlags2 dst_stage_mask
+) {
+    vk::ImageMemoryBarrier2 barrier{
+        .srcStageMask = src_stage_mask,
+        .srcAccessMask = src_access_mask,
+        .dstStageMask = dst_stage_mask,
+        .dstAccessMask = dst_access_mask,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+        .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+        .image = image,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    vk::DependencyInfo dep = vk::DependencyInfo{
+        .dependencyFlags = {},
+    }.setImageMemoryBarriers(barrier);
+
+    command_buffer.pipelineBarrier2(dep);
+}
+
+void vgraphplay::gfx::System::copyBufferToImage(
+    vk::raii::CommandBuffer &command_buffer,
+    const vk::Buffer buffer,
+    const vk::Image image,
+    uint32_t width,
+    uint32_t height
+) {
+    vk::BufferImageCopy bi_cp{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {width, height, 1},
+    };
+    command_buffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, bi_cp);
+}
+
+void vgraphplay::gfx::System::initTextureImage() {
+    assert(m_device != nullptr);
+
+    int tex_width, tex_height, tex_channels;
+    stbi_uc *pixels = stbi_load_from_memory(
+        WARREN_TEXTURE.data(), WARREN_TEXTURE.size(),
+        &tex_width, &tex_height, &tex_channels,
+        STBI_rgb_alpha
+    );
+    vk::DeviceSize tex_size = tex_width * tex_height * 4;
+    assert(pixels != nullptr);
+
+    auto [staging_buffer, staging_buffer_memory] = createBuffer(
+        tex_size,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        "texture staging"
+    );
+
+    void *data = staging_buffer_memory.mapMemory(0, tex_size);
+    std::memcpy(data, pixels, tex_size);
+    staging_buffer_memory.unmapMemory();
+    stbi_image_free(pixels);
+
+    std::tie(m_texture_image, m_texture_image_memory) = createImage(
+        tex_width, tex_height,
+        vk::Format::eR8G8B8A8Srgb,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal
+    );
+
+    vk::raii::CommandBuffer cmds = beginOneTimeCommands();
+    transitionImageLayout(
+        cmds,
+        *m_texture_image,
+        vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eTransferDstOptimal,
+        {},
+        vk::AccessFlagBits2::eTransferWrite,
+        vk::PipelineStageFlagBits2::eTopOfPipe,
+        vk::PipelineStageFlagBits2::eTransfer
+    );
+    copyBufferToImage(cmds, *staging_buffer, *m_texture_image, tex_width, tex_height);
+    transitionImageLayout(
+        cmds,
+        *m_texture_image,
+        vk::ImageLayout::eTransferDstOptimal,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::AccessFlagBits2::eTransferWrite,
+        vk::AccessFlagBits2::eShaderRead,
+        vk::PipelineStageFlagBits2::eTransfer,
+        vk::PipelineStageFlagBits2::eFragmentShader
+    );
+    endOneTimeCommands(std::move(cmds));
 }
 
 void vgraphplay::gfx::System::drawFrame() {
@@ -1075,113 +1178,6 @@ VkFormat vgraphplay::gfx::System::chooseDepthFormat() {
                         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
-bool vgraphplay::gfx::System::initTextureImage() {
-    if (m_texture_image != VK_NULL_HANDLE && m_texture_image_memory != VK_NULL_HANDLE) {
-        return true;
-    }
-
-    if (m_device == VK_NULL_HANDLE) {
-        BOOST_LOG_TRIVIAL(error) << "Things have been initialized out of order. Cannot create texture image";
-        return false;
-    }
-
-    int tex_width, tex_height, tex_channels;
-    stbi_uc *pixels = stbi_load_from_memory(WARREN_TEXTURE.begin(), WARREN_TEXTURE.size(),
-                                            &tex_width, &tex_height, &tex_channels,
-                                            STBI_rgb_alpha);
-    VkDeviceSize tex_size = tex_width * tex_height * 4;
-
-    VkBuffer staging_buffer;
-    VkDeviceMemory staging_buffer_memory;
-    bool brslt = createBuffer(tex_size,
-                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                              staging_buffer,
-                              staging_buffer_memory);
-
-    if (!brslt) {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create staging buffer for texture image";
-        return false;
-    }
-
-    void *data;
-    VkResult rslt = vkMapMemory(m_device, staging_buffer_memory, 0, tex_size, 0, &data);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Mapped memory for staging buffer for texture image: " << staging_buffer_memory;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to map memory for staging buffer for texture image "<< rslt;
-        return false;
-    }
-
-    std::memcpy(data, pixels, static_cast<size_t>(tex_size));
-    vkUnmapMemory(m_device, staging_buffer_memory);
-    BOOST_LOG_TRIVIAL(trace) << "Unmapped memory for staging buffer for texture image";
-    stbi_image_free(pixels);
-
-    brslt = createImage(static_cast<uint32_t>(tex_width), static_cast<uint32_t>(tex_height),
-                        VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
-                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                        m_texture_image, m_texture_image_memory);
-    if (brslt) {
-        BOOST_LOG_TRIVIAL(trace) << "Created texture image " << m_texture_image << " with memory " << m_texture_image_memory;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create texture image";
-        return false;
-    }
-
-    brslt = transitionImageLayout(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM,
-                                  VK_IMAGE_LAYOUT_UNDEFINED,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    if (brslt) {
-        BOOST_LOG_TRIVIAL(trace) << "Transitioned texture image " << m_texture_image << " layout for transfer";
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to transition image layout";
-        return false;
-    }
-
-    brslt = copyBufferToImage(staging_buffer, m_texture_image, tex_width, tex_height);
-    if (brslt) {
-        BOOST_LOG_TRIVIAL(trace) << "Copied staging buffer " << staging_buffer << " to texture image " << m_texture_image;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to copy staging buffer to texture image";
-        return false;
-    }
-
-    brslt = transitionImageLayout(m_texture_image, VK_FORMAT_R8G8B8A8_UNORM,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    if (brslt) {
-        BOOST_LOG_TRIVIAL(trace) << "Transitioned texture image " << m_texture_image << " layout for sampling";
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to transition image layout for sampling";
-        return false;
-    }
-
-    vkDestroyBuffer(m_device, staging_buffer, nullptr);
-    BOOST_LOG_TRIVIAL(trace) << "Destroyed staging buffer for texture image";
-    vkFreeMemory(m_device, staging_buffer_memory, nullptr);
-    BOOST_LOG_TRIVIAL(trace) << "Freed staging buffer memory for texture image";
-
-    return true;
-}
-
-void vgraphplay::gfx::System::cleanupTextureImage() {
-    if (m_device != VK_NULL_HANDLE) {
-        if (m_texture_image != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Destroying texture image: " << m_texture_image;
-            vkDestroyImage(m_device, m_texture_image, nullptr);
-            m_texture_image = VK_NULL_HANDLE;
-        }
-
-        if (m_texture_image_memory != VK_NULL_HANDLE) {
-            BOOST_LOG_TRIVIAL(trace) << "Freeing texture image memory: " << m_texture_image_memory;
-            vkFreeMemory(m_device, m_texture_image_memory, nullptr);
-            m_texture_image_memory = VK_NULL_HANDLE;
-        }
-    }
-}
-
 bool vgraphplay::gfx::System::initTextureImageView() {
     if (m_texture_image_view != VK_NULL_HANDLE) {
         return true;
@@ -1280,62 +1276,6 @@ bool vgraphplay::gfx::System::hasStencilComponent(VkFormat format) {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
-bool vgraphplay::gfx::System::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory) {
-    VkImageCreateInfo img_ci;
-    img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    img_ci.pNext = nullptr;
-    img_ci.flags = 0;
-    img_ci.imageType = VK_IMAGE_TYPE_2D;
-    img_ci.format = format;
-    img_ci.extent.width = width;
-    img_ci.extent.height = height;
-    img_ci.extent.depth = 1;
-    img_ci.mipLevels = 1;
-    img_ci.arrayLayers = 1;
-    img_ci.samples = VK_SAMPLE_COUNT_1_BIT;
-    img_ci.tiling = tiling;
-    img_ci.usage = usage;
-    img_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    img_ci.queueFamilyIndexCount = 0;
-    img_ci.pQueueFamilyIndices = nullptr;
-    img_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    VkResult rslt = vkCreateImage(m_device, &img_ci, nullptr, &image);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Created image: " << image;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to create image " << rslt;
-        return false;
-    }
-
-    VkMemoryRequirements mem_reqs;
-    vkGetImageMemoryRequirements(m_device, image, &mem_reqs);
-
-    VkMemoryAllocateInfo mem_ai;
-    mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    mem_ai.pNext = nullptr;
-    mem_ai.memoryTypeIndex = chooseMemoryTypeIndex(mem_reqs.memoryTypeBits, properties);
-    mem_ai.allocationSize = mem_reqs.size;
-
-    rslt = vkAllocateMemory(m_device, &mem_ai, nullptr, &memory);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Allocated memory for image: " << memory;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to allocate memory for image " << rslt;
-        return false;
-    }
-
-    rslt = vkBindImageMemory(m_device, image, memory, 0);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Bound memory " << memory << " to image " << image;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to bind memory to image " << rslt;
-        return false;
-    }
-
-    return true;
-}
-
 VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_mask) {
     VkImageViewCreateInfo iv_ci;
     iv_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1364,94 +1304,6 @@ VkImageView vgraphplay::gfx::System::createImageView(VkImage image, VkFormat for
     }
 
     return iv_rv;
-}
-
-bool vgraphplay::gfx::System::copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height) {
-    VkCommandBuffer cb = beginOneTimeCommands();
-    if (cb == VK_NULL_HANDLE) {
-        return false;
-    }
-
-    VkBufferImageCopy bi_cp;
-    bi_cp.bufferOffset = 0;
-    bi_cp.bufferRowLength = 0;
-    bi_cp.bufferImageHeight = 0;
-    bi_cp.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bi_cp.imageSubresource.mipLevel = 0;
-    bi_cp.imageSubresource.layerCount = 1;
-    bi_cp.imageSubresource.baseArrayLayer = 0;
-    bi_cp.imageOffset = { 0, 0, 0 };
-    bi_cp.imageExtent = { width, height, 1 };
-
-    vkCmdCopyBufferToImage(cb, src, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bi_cp);
-
-    return endOneTimeCommands(cb);
-}
-
-VkCommandBuffer vgraphplay::gfx::System::beginOneTimeCommands() {
-    VkCommandBufferAllocateInfo cb_ai;
-    cb_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cb_ai.pNext = nullptr;
-    cb_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cb_ai.commandPool = m_command_pool;
-    cb_ai.commandBufferCount = 1;
-
-    VkCommandBuffer cb_rv{VK_NULL_HANDLE};
-    VkResult rslt = vkAllocateCommandBuffers(m_device, &cb_ai, &cb_rv);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Allocated command buffer: " << cb_rv;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Unable to allocate command buffer " << rslt;
-        return VK_NULL_HANDLE;
-    }
-
-    VkCommandBufferBeginInfo cb_bi;
-    cb_bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cb_bi.pNext = nullptr;
-    cb_bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    cb_bi.pInheritanceInfo = nullptr;
-
-    vkBeginCommandBuffer(cb_rv, &cb_bi);
-
-    return cb_rv;
-}
-
-bool vgraphplay::gfx::System::endOneTimeCommands(VkCommandBuffer commands) {
-    VkResult rslt = vkEndCommandBuffer(commands);
-    if (rslt != VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(error) << "Error ending recording to command buffer " << rslt;
-        return false;
-    }
-
-    VkSubmitInfo si;
-    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    si.pNext = nullptr;
-    si.waitSemaphoreCount = 0;
-    si.pWaitSemaphores = nullptr;
-    si.pWaitDstStageMask = nullptr;
-    si.commandBufferCount = 1;
-    si.pCommandBuffers = &commands;
-    si.signalSemaphoreCount = 0;
-    si.pSignalSemaphores = nullptr;
-
-    rslt = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Submitted command buffer " << commands;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Failed to submit command buffer " << rslt;
-        return false;
-    }
-
-    vkQueueWaitIdle(m_graphics_queue);
-    if (rslt == VK_SUCCESS) {
-        BOOST_LOG_TRIVIAL(trace) << "Finished executing command buffer " << commands;
-    } else {
-        BOOST_LOG_TRIVIAL(error) << "Error waiting for command buffer to complete " << rslt;
-        return false;
-    }
-
-    vkFreeCommandBuffers(m_device, m_command_pool, 1, &commands);
-    return true;
 } */
 
 bool hasExtension(std::vector<vk::ExtensionProperties> &all_extensions, const char *extension_name) {

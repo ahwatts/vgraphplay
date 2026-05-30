@@ -58,6 +58,8 @@ namespace vgraphplay {
             void initIndexBuffer();
             void initUniformBuffers();
 
+            void initTextureImage();
+
             void initCommandPool();
             void initCommandBuffer();
             
@@ -74,8 +76,35 @@ namespace vgraphplay {
             );
             void copyBuffer(vk::raii::Buffer &src, vk::raii::Buffer &dst, vk::DeviceSize size);
 
-            /* bool initTextureImage();
-            bool initTextureImageView();
+            std::pair<vk::raii::Image, vk::raii::DeviceMemory> createImage(
+                uint32_t width, uint32_t height,
+                vk::Format format,
+                vk::ImageTiling tiling,
+                vk::ImageUsageFlags usage,
+                vk::MemoryPropertyFlags properties
+            );
+            void transitionImageLayout(
+                vk::raii::CommandBuffer &command_buffer,
+                const vk::Image &image,
+                vk::ImageLayout old_layout,
+                vk::ImageLayout new_layout,
+                vk::AccessFlags2 src_access_mask,
+                vk::AccessFlags2 dst_access_mask, 
+                vk::PipelineStageFlags2 src_stage_mask,
+                vk::PipelineStageFlags2 dst_stage_mask
+            );
+            void copyBufferToImage(
+                vk::raii::CommandBuffer &command_buffer,
+                const vk::Buffer buffer,
+                const vk::Image image,
+                uint32_t width,
+                uint32_t height
+            );
+
+            vk::raii::CommandBuffer beginOneTimeCommands();
+            void endOneTimeCommands(vk::raii::CommandBuffer &&commands);
+            
+            /* bool initTextureImageView();
             bool initTextureSampler();
             void cleanupTextureImage();
             void cleanupTextureImageView();
@@ -86,12 +115,7 @@ namespace vgraphplay {
             VkFormat chooseDepthFormat();
 
             bool createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &memory);
-            VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
-
-            bool copyBufferToImage(VkBuffer src, VkImage dst, uint32_t width, uint32_t height);
-
-            VkCommandBuffer beginOneTimeCommands();
-            bool endOneTimeCommands(VkCommandBuffer commands); */
+            VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags); */
 
             bool m_debug;
             GLFWwindow *m_window;
@@ -116,8 +140,8 @@ namespace vgraphplay {
             vk::raii::DeviceMemory m_vertex_buffer_memory, m_index_buffer_memory;
             std::vector<vk::raii::DeviceMemory> m_uniform_buffers_memory;
             std::vector<void *> m_uniform_buffers_mapped;
-            // VkImage m_texture_image;
-            // VkDeviceMemory m_texture_image_memory;
+            vk::raii::Image m_texture_image;
+            vk::raii::DeviceMemory m_texture_image_memory;
             // VkImageView m_texture_image_view;
             // VkSampler m_texture_sampler;
 

@@ -200,10 +200,6 @@ vgraphplay::gfx::System::~System() {
 }
 
 void vgraphplay::gfx::System::initInstance() {
-    if (m_instance != nullptr) {
-        return;
-    }
-
     vk::InstanceCreateFlags flags;
     std::vector<const char *> extension_names = buildInstanceExtensionList(m_context, m_debug);
     std::vector<const char *> layer_names = buildInstanceLayerList(m_context, m_debug);
@@ -222,24 +218,18 @@ void vgraphplay::gfx::System::initInstance() {
         .apiVersion = vk::ApiVersion14
     };
 
-    vk::InstanceCreateInfo inst_ci{
+    vk::InstanceCreateInfo inst_ci = vk::InstanceCreateInfo{
         .flags = flags,
-        .pApplicationInfo = &app_info,
-        .enabledLayerCount = static_cast<uint32_t>(layer_names.size()),
-        .ppEnabledLayerNames = layer_names.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(extension_names.size()),
-        .ppEnabledExtensionNames = extension_names.data(),
-    };
+        .pApplicationInfo = &app_info
+    }
+        .setPEnabledLayerNames(layer_names)
+        .setPEnabledExtensionNames(extension_names);
 
     m_instance = m_context.createInstance(inst_ci);
     BOOST_LOG_TRIVIAL(trace) << "Vulkan instance created: " << *m_instance;
 }
 
 void vgraphplay::gfx::System::initDebugMessenger() {
-    if (!m_debug || m_debug_messenger != nullptr) {
-        return;
-    }
-
     assert(m_instance != nullptr);
 
     vk::DebugUtilsMessengerCreateInfoEXT dm_ci{
@@ -314,14 +304,9 @@ vk::raii::PhysicalDevice choosePhysicalDevice(const std::vector<vk::raii::Physic
 }
 
 void vgraphplay::gfx::System::initDevice() {
-    if (m_device != nullptr) {
-        return;
-    }
-
     assert(m_instance != nullptr);
     assert(m_surface != nullptr);
 
-    // logPhysicalDevices(m_instance);
     const std::vector<vk::raii::PhysicalDevice> physical_devices = m_instance.enumeratePhysicalDevices();
     m_physical_device = choosePhysicalDevice(physical_devices);
     BOOST_LOG_TRIVIAL(trace) << "Chose physical device " << m_physical_device.getProperties().deviceName;
@@ -489,6 +474,8 @@ void vgraphplay::gfx::System::initSwapchain() {
 }
 
 void vgraphplay::gfx::System::recreateSwapchain() {
+    // Retrieve the new width and height of the window. Wait until GLFW is ready
+    // to send us the dimensions.
     int width{0}, height{0};
     glfwGetFramebufferSize(m_window, &width, &height);
     while (width == 0 || height == 0) {
@@ -496,13 +483,18 @@ void vgraphplay::gfx::System::recreateSwapchain() {
         glfwWaitEvents();
     }
 
+    // Wait until we're done rendering frames.
     m_device.waitIdle();
+
+    // Clear out all the stuff that depends on the framebuffer width & height.
     m_swapchain_image_views.clear();
     m_swapchain_images.clear();
     m_swapchain = nullptr;
-    m_depth_image = nullptr;
-    m_depth_image_memory = nullptr;
     m_depth_image_view = nullptr;
+    m_depth_image_memory = nullptr;
+    m_depth_image = nullptr;
+
+    // Reinitialize all that stuff.
     initSwapchain();
     initDepthResources();
 }
